@@ -1,0 +1,18 @@
+{
+  "name": "workpath-author-local",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "workspaces": ["apps/*", "packages/*"],
+  "scripts": {
+    "dev": "npm run build -w @workpath/core && concurrently -k -n api,web -c blue,magenta \"npm run dev -w @workpath/server\" \"npm run dev -w @workpath/web\"",
+    "build": "npm run build -w @workpath/core && npm run build -w @workpath/web && npm run build -w @workpath/server",
+    "start": "npm run start -w @workpath/server",
+    "typecheck": "npm run build -w @workpath/core && npm run typecheck --workspaces --if-present",
+    "test": "npm run test -w @workpath/core && npm run test -w @workpath/server"
+  },
+  "devDependencies": {
+    "concurrently": "^9.2.1",
+    "typescript": "^5.9.3"
+  }
+}

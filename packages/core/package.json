@@ -1,0 +1,20 @@
+{
+  "name": "@workpath/core",
+  "version": "0.1.0",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "tsx --test src/*.test.ts"
+  },
+  "dependencies": { "jszip": "^3.10.1", "mustache": "^4.2.0" },
+  "devDependencies": { "@types/mustache": "^4.2.6", "@types/node": "^24.10.1", "tsx": "^4.20.6" }
+}
