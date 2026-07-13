@@ -1,14 +1,14 @@
 import { createWidgetBlock, findWidgetDefinition, renderContentBlock, validateBlock } from "./widgets.js";
 import type { ContentBlock } from "./schema.js";
 
-export const STORYBOARD_BLOCK_TYPES = ["Rich text", "Note / callout", "Accordion", "Checklist", "Quote", "Image", "Image + text", "Table"] as const;
+export const STORYBOARD_BLOCK_TYPES = ["Rich text", "Note / callout", "Accordion", "Checklist", "Quote", "Image", "Image + text", "Table", "Card grid", "Responsive columns", "Resource link card", "Styled list group", "Code snippet", "True or false", "Single-answer knowledge check", "Multiple-answer knowledge check", "Flip cards", "Hotspot image", "Custom HTML", "Image gallery / carousel", "Video embed"] as const;
 export type StoryboardBlockType = typeof STORYBOARD_BLOCK_TYPES[number];
 export type StoryboardRowInput = { topic: string; order: number | string; blockType: string; content: string; mapping: string; settingsJson: string };
 export type StoryboardMessage = { row: number; severity: "error" | "warning"; message: string };
 export type VerifiedStoryboardRow = { row: number; order: number; blockType: StoryboardBlockType; content: string; mapping: string; settingsJson: string; block?: ContentBlock; previewHtml: string };
 export type StoryboardVerification = { title: string; rows: VerifiedStoryboardRow[]; messages: StoryboardMessage[]; valid: boolean };
 
-const widgetKeys: Record<Exclude<StoryboardBlockType, "Rich text">, string> = { "Note / callout": "note", Accordion: "accordion", Checklist: "checklist", Quote: "quote", Image: "image", "Image + text": "image-text", Table: "table" };
+const widgetKeys: Record<Exclude<StoryboardBlockType, "Rich text">, string> = { "Note / callout": "note", Accordion: "accordion", Checklist: "checklist", Quote: "quote", Image: "image", "Image + text": "image-text", Table: "table", "Card grid": "card-grid", "Responsive columns": "responsive-columns", "Resource link card": "resource-card", "Styled list group": "list-group", "Code snippet": "code-snippet", "True or false": "true-false", "Single-answer knowledge check": "single-choice", "Multiple-answer knowledge check": "multiple-choice", "Flip cards": "flip-cards", "Hotspot image": "hotspot-image", "Custom HTML": "custom-html", "Image gallery / carousel": "image-gallery", "Video embed": "video-embed" };
 const escapeHtml = (value: string) => value.replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;").replaceAll('"', "&quot;");
 
 export function markdownToHtml(markdown: string) {
@@ -98,7 +98,8 @@ export function verifyStoryboardRows(inputs: StoryboardRowInput[]): StoryboardVe
 export function storyboardRowFromBlock(title: string, block: ContentBlock, order: number): StoryboardRowInput {
   if (block.type === "richText") return { topic: order === 1 ? title : "", order, blockType: "Rich text", content: htmlToMarkdown(block.html), mapping: block.metadata?.mapping ?? "", settingsJson: JSON.stringify({ html: block.html }) };
   const definition = findWidgetDefinition(block.widgetKey); const blockType = (Object.entries(widgetKeys).find(([, key]) => key === block.widgetKey)?.[0] ?? definition?.name ?? block.widgetKey) as StoryboardBlockType;
-  const params = structuredClone(block.params); if (block.widgetKey === "image" || block.widgetKey === "image-text") params.imageAssetId = "";
+  const stripAssetIds = (value: unknown): unknown => Array.isArray(value) ? value.map(stripAssetIds) : value && typeof value === "object" ? Object.fromEntries(Object.entries(value as Record<string, unknown>).map(([key, field]) => [key, key.toLowerCase().endsWith("assetid") ? "" : stripAssetIds(field)])) : value;
+  const params = stripAssetIds(structuredClone(block.params)) as Record<string, unknown>;
   return { topic: order === 1 ? title : "", order, blockType, content: widgetContent(blockType, block.params, block.metadata?.imagePrompt), mapping: block.metadata?.mapping ?? "", settingsJson: JSON.stringify({ definitionVersion: block.definitionVersion, params, ...(block.metadata?.imagePrompt ? { imagePrompt: block.metadata.imagePrompt } : {}) }) };
 }
 

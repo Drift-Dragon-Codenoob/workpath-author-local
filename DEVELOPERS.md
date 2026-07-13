@@ -12,7 +12,7 @@ The new direction is:
 - The primary delivery contract is a ZIP that Moodle imports as a native, editable **Book** resource.
 - The previous browser application remains a reference and migration source; it is not the architectural foundation of this rebuild.
 
-This repository is currently an independently initialised local Git repository with no first commit and no remote configured.
+This repository is committed on `main` and tracks `https://github.com/Drift-Dragon-Codenoob/workpath-author-local.git` as `origin`.
 
 ## Current status
 
@@ -27,13 +27,16 @@ The foundation is runnable and verified. It currently provides:
 - A shared Moodle Book compiler.
 - Original `.workpath.json` and `.uoclearn.json` project migration with explicit compatibility warnings.
 - A block canvas with TinyMCE rich-text editing, ordering, duplication and deletion.
-- Shared built-in Note, Accordion, Checklist, Quote, Image, Image + Text and Table widget definitions and rendering.
+- A searchable Rise-inspired block library with 21 authoring options grouped by category.
+- Shared definitions and Moodle-safe rendering for content, layout, resource, media, interaction, knowledge-check, data and advanced blocks.
 - Rise-inspired top-down authoring with the block library appended after lesson content.
 - A separate Moodle preview mode with book-topic navigation.
 - Direct-edit dynamic tables with one to ten columns and up to fifty rows.
 - Revision-safe PNG, JPEG, GIF and WebP upload, preview and Moodle packaging.
 - Moodle chapter and `_sub.html` subchapter generation.
 - Validated Excel storyboard template, verification review, chapter/subchapter import and lossless Excel/CSV export.
+- Full-book structured Excel export with one canonical worksheet per chapter and subchapter.
+- Validated full-book Excel import from the project selection screen.
 - A compiler test confirming the expected ZIP structure.
 - A production build in which the Node service can serve the compiled frontend.
 
@@ -88,7 +91,12 @@ WorkPath Author Local/
       src/compiler.test.ts
       src/index.ts       Public core API
   README.md              Short operator quick start
+  EXCEL_WORKBOOKS.md     Canonical Excel import/export contract
   DEVELOPERS.md          This handover document
+  run-workpath.mjs       Cross-platform build/start/browser launcher
+  Run WorkPath.cmd       Native Windows launcher wrapper
+  Run WorkPath.ps1       Windows/WSL path detection and delegation
+  run-workpath.sh        WSL/Linux launcher wrapper
   package.json           Root workspace commands
   tsconfig.base.json     Shared TypeScript settings
 ```
@@ -190,6 +198,8 @@ Build `@workpath/core`, then start:
 
 - React/Vite: `http://127.0.0.1:4173`
 - Local API: `http://127.0.0.1:4174`
+
+For the shareable single-server workflow, use `npm run launch`. The launcher builds the application, chooses a free localhost port and opens the browser. Set `WORKPATH_NO_OPEN=1` for automated smoke tests that should not launch a browser.
 
 ```bash
 npm run typecheck
@@ -313,6 +323,10 @@ type RichTextBlock = {
 };
 ```
 
+Built-in widget definitions live in `packages/core/src/widgets.ts`. The registry currently adds Card grid, Responsive columns, Resource link card, Styled list group, Code snippet, True or false, Single-answer knowledge check, Multiple-answer knowledge check, Flip cards, Hotspot image, Custom HTML, Image gallery/carousel and Video embed to the original local block set. Definitions drive default data, the generic React editor, preview, validation, Excel Settings JSON and Moodle rendering.
+
+Interactive blocks use semantic HTML and printable fallbacks rather than requiring JavaScript. Custom HTML removes scripts, iframes, inline event handlers and JavaScript URLs, and validation blocks export until unsafe source is removed. Dedicated Video embed is the supported iframe path and only converts approved provider URLs.
+
 Every future schema change must include:
 
 1. A new schema version.
@@ -355,6 +369,10 @@ Loads the complete current project. This will eventually be replaced or suppleme
 
 Saves a complete project after revision validation.
 
+### `DELETE /api/projects/:id`
+
+Permanently removes the validated project directory, including its content, assets and exports. The project must load successfully before deletion, and the ID is constrained to the project store root.
+
 ### `GET|POST /api/projects/:id/export`
 
 Compiles and returns the Moodle Book ZIP.
@@ -369,13 +387,29 @@ Streams an original project image for local preview. Browser previews use this U
 
 ### Storyboard endpoints
 
-- `GET /api/storyboard/template.xlsx` returns the canonical three-sheet Excel template.
+The canonical external workbook contract is documented in [EXCEL_WORKBOOKS.md](./EXCEL_WORKBOOKS.md). Keep it synchronized with parser, registry, image-fallback and template changes.
+
+- `GET /api/storyboard/template.xlsx` returns the canonical three-sheet Excel template with a 21-option validated block dropdown.
 - `POST /api/storyboard/verify?filename=...` accepts an XLSX or CSV body and returns parsed rows, previews, warnings and blocking errors without changing a project.
 - `POST /api/projects/:id/storyboard/import` re-verifies submitted rows and creates one chapter or subchapter using optimistic revision checks.
 - `GET /api/projects/:id/pages/:pageId/storyboard.xlsx` exports a lossless Excel storyboard.
 - `GET /api/projects/:id/pages/:pageId/storyboard.csv` exports the compatible plain CSV representation.
+- `GET /api/projects/:id/storyboard.xlsx` exports the complete editable book with one canonical worksheet per chapter and subchapter, followed by the shared Instructions and Block Types sheets.
+- `POST /api/import/storyboard-book` validates a complete XLSX body and creates a new local project only when every content worksheet is valid.
 
 Canonical block names are exact and are listed on the workbook's visible `Block Types` sheet. `Settings JSON` is authoritative when present. Mapping and suggested-image prompts live in block metadata and must never be passed to `renderContentBlock` output or Moodle reports.
+
+The template's `Block Types` sheet has three columns: exact block name, block-library category and authoring guidance. The Storyboard validation list and Validation notes lookup derive their range from `STORYBOARD_BLOCK_TYPES.length`; never restore a hard-coded final row when adding another block. Keep `STORYBOARD_BLOCK_TYPES`, the widget registry, workbook guidance and the template regression test aligned.
+
+The original eight structured storyboard types have readable Markdown import conventions. Newer blocks rely on `Settings JSON` because their nested data cannot be represented reliably in one Content cell. Spreadsheet export recursively removes every property ending in `AssetId`; assets must be selected again in the destination project.
+
+Image rendering follows a three-level fallback: use the selected asset, otherwise show non-empty `altText` visibly in an image-shaped substitute, otherwise use a generated placeholder. Whole-book import creates a single trusted `placeholder-image.svg` asset only when a required image slot has neither an asset nor alternative text. `applyImportedImagePlaceholders` covers Image, Image + text, Hotspot image and every Image gallery entry while preserving existing selections, authored alt text and optional Card grid images. The SVG is stored under the imported project's `assets/originals` folder and is packaged normally if an author exports before replacing it.
+
+The whole-book workbook includes disabled chapters because it is an editable-source handover. Moodle ZIP compilation continues to omit disabled chapters. Worksheet names are sanitised for Excel, limited to 31 characters and made unique without changing the Topic value stored in the sheet.
+
+Whole-book exports include a `Book Structure` worksheet containing project metadata and the chapter/subchapter hierarchy. Import uses it to restore parentage, ordering, summaries and enabled state. For backward compatibility, a multi-sheet workbook without `Book Structure` imports each non-reference worksheet as a top-level chapter. Import is all-or-nothing: validation errors are returned before a project directory is created.
+
+`loadWorkbook` first uses ExcelJS normally. On failure, `normalizeNamespacedWorkbook` provides compatibility with the GPTWork-generated OOXML dialect: it repairs workbook content types and absolute relationship targets, removes the `x:` namespace prefix, and strips decorative table package parts that ExcelJS cannot model. Normalisation occurs only in memory; semantic Storyboard and Book Structure validation is unchanged. Keep the compatibility regression test when updating ExcelJS or workbook generation.
 
 The current API buffers JSON and ZIP output in memory. Media and large exports must move to streaming implementations before large-book readiness.
 
@@ -500,18 +534,17 @@ These are known, not accidental omissions:
 - The API buffers bodies and compiled ZIPs in memory.
 - The web client loads and saves the complete project.
 - Autosave and crash recovery are not implemented.
-- The HTML editor is a raw textarea placeholder.
-- Rich-text and widget HTML are not yet sanitised before compilation.
-- Asset references are not yet rewritten from project paths into compiled ZIP paths.
-- The compiler does not yet detect broken internal links or duplicate slugs.
+- Rich-text authoring uses TinyMCE; structured widget editors remain purpose-built React controls.
+- HTML safety checks reject scripts, event handlers and JavaScript URLs, but institutional Moodle sanitisation compatibility still needs fixture-based certification.
+- Image asset references are rewritten and packaged for Moodle; broader media types and media lifecycle operations are not implemented.
+- The compiler creates collision-safe page filenames but does not yet validate authored internal links.
 - The validation report is text-only and minimal.
-- No legacy project importer exists.
+- Original `.workpath.json` and `.uoclearn.json` migration exists; `.workpath.zip` media migration does not.
 - Built-in typed widget definitions exist, but external YAML widget-pack discovery and validation are not implemented yet.
 - No Moodle compatibility suite has been run against the institutional environment.
 - CORS currently permits the fixed Vite development origin only.
-- There is no installer, tray process, automatic port discovery or controlled shutdown UI.
+- There is no installer, tray process or controlled shutdown UI. The included launcher provides automatic port discovery and terminal-based shutdown.
 - There is no application authentication because the service is localhost-only.
-- The Git repository has no initial commit or remote.
 
 ## Recommended next implementation sequence
 
@@ -586,19 +619,15 @@ The first releasable local version should allow an author to:
 4. Run `npm run typecheck` and `npm test`.
 5. Run `npm run dev` and open `http://127.0.0.1:4173`.
 6. Create a test project and export a Moodle ZIP.
-7. Check `git status`; the repository currently has no initial commit.
+7. Check `git status` and preserve any existing local work before editing.
 8. Start with Milestone 1 or agree on a different milestone before adding widgets.
 
 ## Last verified state
 
-At handover, the following passed:
+Last verified on 13 July 2026:
 
-- Dependency installation with zero reported vulnerabilities.
 - TypeScript checks across all workspaces.
-- Core compiler test.
+- All 30 core and server tests, including missing-image Moodle export, the complete block registry, HTML/video safety, nested gallery media, visible alt-text fallback, imported placeholder assignment, Excel template, namespaced workflow compatibility, page round-trip and whole-book export/import coverage.
 - Core, web and server production builds.
-- Production server startup.
-- Local project creation and loading.
-- Moodle ZIP export smoke test.
 
-The smoke-test server was stopped afterward. Normal development starts with `npm run dev`.
+The production build reports a Vite size warning for the lazy-loaded TinyMCE editor chunk. This is a performance warning, not a build failure. Normal development starts with `npm run dev`.

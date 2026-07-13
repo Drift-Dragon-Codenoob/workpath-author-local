@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { renderContentBlock, type AssetRecord, type Chapter, type ContentBlock, type StoryboardRowInput, type StoryboardVerification, type Subchapter, type WorkPathProject } from "@workpath/core";
+import { Trash2 } from "lucide-react";
 import { BlockCanvas } from "./BlockCanvas";
 
 type ProjectListItem = { id: string; title: string; updatedAt: string; revision: number };
@@ -31,6 +32,7 @@ export function App() {
   const [status, setStatus] = useState("Connecting to local service…");
   const [previewMode, setPreviewMode] = useState(false);
   const importInput = useRef<HTMLInputElement>(null);
+  const bookWorkbookInput = useRef<HTMLInputElement>(null);
   const storyboardInput = useRef<HTMLInputElement>(null);
   const storyboardTargetRef = useRef<{ kind: "chapter" | "subchapter"; parentChapterId?: string } | null>(null);
   const [storyboardTarget, setStoryboardTarget] = useState<{ kind: "chapter" | "subchapter"; parentChapterId?: string } | null>(null);
@@ -42,6 +44,14 @@ export function App() {
   async function refreshProjects() { const next = await request<ProjectListItem[]>("/api/projects"); setProjects(next); setStatus(`${next.length} local project(s)`); }
   useEffect(() => { void refreshProjects().catch((error) => setStatus(error.message)); }, []);
   async function openProject(id: string) { const next = await request<WorkPathProject>(`/api/projects/${id}`); setProjectId(id); setProject(next); setSelectedPageId(next.chapters[0]?.id ?? ""); setPreviewMode(false); setStatus(`Opened ${next.title}`); }
+  async function deleteProject(item: ProjectListItem) {
+    if (!window.confirm(`Delete “${item.title}” permanently?\n\nThis removes its saved content, assets and exports. This action cannot be undone.`)) return;
+    try {
+      await request<{ id: string; title: string }>(`/api/projects/${item.id}`, { method: "DELETE" });
+      setProjects((current) => current.filter((projectItem) => projectItem.id !== item.id));
+      setStatus(`Deleted ${item.title}`);
+    } catch (error) { setStatus(error instanceof Error ? `Delete failed: ${error.message}` : "Delete failed"); }
+  }
   async function createNew() {
     const title = window.prompt("Project title", "Untitled Moodle Book")?.trim(); if (!title) return;
     const created = await request<{ id: string; project: WorkPathProject }>("/api/projects", { method: "POST", body: JSON.stringify({ title }) });
@@ -57,6 +67,17 @@ export function App() {
       setStatus(imported.warnings.length ? `Imported with ${imported.warnings.length} warning(s): ${imported.warnings.join(" ")}` : `Imported WorkPath ${imported.sourceSchemaVersion} project`); void refreshProjects();
     } catch (error) { setStatus(error instanceof Error ? `Import failed: ${error.message}` : "Import failed"); }
     finally { if (importInput.current) importInput.current.value = ""; }
+  }
+  async function importBookWorkbook(file: File) {
+    try {
+      if (file.size > 20 * 1024 * 1024) throw new Error("Book workbook must be smaller than 20 MB.");
+      setStatus(`Importing ${file.name}…`);
+      const response = await fetch("/api/import/storyboard-book", { method: "POST", headers: { "Content-Type": file.type || "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" }, body: file });
+      const result = await response.json().catch(() => null) as { id?: string; project?: WorkPathProject; error?: string; verification?: { errors?: string[] } } | null;
+      if (!response.ok || !result?.id || !result.project) throw new Error(result?.verification?.errors?.join(" ") || result?.error || `Import failed (${response.status})`);
+      setProjectId(result.id); setProject(result.project); setSelectedPageId(result.project.chapters[0]?.id ?? ""); setPreviewMode(false); setStatus(`Imported ${result.project.title}`); void refreshProjects();
+    } catch (error) { setStatus(error instanceof Error ? `Import failed: ${error.message}` : "Book workbook import failed"); }
+    finally { if (bookWorkbookInput.current) bookWorkbookInput.current.value = ""; }
   }
   async function save() {
     if (!project) return null;
@@ -100,6 +121,11 @@ export function App() {
     change((current) => ({ ...current, chapters: current.chapters.map((entry) => entry.id === chapterId ? { ...entry, subchapters: entry.subchapters.filter((item) => item.id !== subchapterId).map((item, index) => ({ ...item, order: index + 1 })) } : entry) })); setSelectedPageId(chapterId);
   }
   const assetUrl = (asset: AssetRecord) => `/api/projects/${projectId}/assets/${asset.id}`;
+  function setNestedParam(params: Record<string, unknown>, path: string, value: unknown) {
+    const parts = path.split("."); const next = structuredClone(params); let target: Record<string, unknown> | unknown[] = next;
+    parts.forEach((part, index) => { if (index === parts.length - 1) { if (Array.isArray(target)) target[Number(part)] = value; else target[part] = value; return; } const child = Array.isArray(target) ? target[Number(part)] : target[part]; if (!child || typeof child !== "object") return; target = child as Record<string, unknown> | unknown[]; });
+    return next;
+  }
   async function uploadBlockImage(blockId: string, parameterName: string, file: File) {
     if (!project) return;
     try {
@@ -107,12 +133,13 @@ export function App() {
       const response = await fetch(`/api/projects/${projectId}/assets`, { method: "POST", headers: { "Content-Type": file.type, "X-Filename": encodeURIComponent(file.name), "X-Project-Revision": String(saved.revision) }, body: file });
       const result = await response.json().catch(() => null) as { asset?: AssetRecord; project?: WorkPathProject; error?: string } | null;
       if (!response.ok || !result?.asset || !result.project) throw new Error(result?.error || `Upload failed (${response.status})`);
-      const asset = result.asset; const updateBlocks = (blocks: ContentBlock[]) => blocks.map((block) => block.id === blockId && block.type === "widget" ? { ...block, params: { ...block.params, [parameterName]: asset.id } } : block);
+      const asset = result.asset; const updateBlocks = (blocks: ContentBlock[]) => blocks.map((block) => block.id === blockId && block.type === "widget" ? { ...block, params: setNestedParam(block.params, parameterName, asset.id) } : block);
       setProject({ ...result.project, chapters: result.project.chapters.map((chapter) => ({ ...chapter, blocks: updateBlocks(chapter.blocks), subchapters: chapter.subchapters.map((subchapter) => ({ ...subchapter, blocks: updateBlocks(subchapter.blocks) })) })) });
       setStatus(`Uploaded ${asset.filename}; save to keep the block selection`);
     } catch (error) { setStatus(error instanceof Error ? error.message : "Image upload failed"); }
   }
   async function exportBook() { if (project && await save()) window.location.href = `/api/projects/${projectId}/export`; }
+  async function exportBookStoryboard() { if (project && await save()) window.location.href = `/api/projects/${projectId}/storyboard.xlsx`; }
   function beginStoryboardImport(kind: "chapter" | "subchapter", parentChapterId?: string) { const target = { kind, parentChapterId }; storyboardTargetRef.current = target; setStoryboardTarget(target); setStoryboardReview(null); setStoryboardError(""); storyboardInput.current?.click(); }
   async function verifyStoryboard(file: File) {
     try {
@@ -135,12 +162,12 @@ export function App() {
   }
   function closeStoryboardReview() { setStoryboardReview(null); setStoryboardTarget(null); setStoryboardError(""); storyboardTargetRef.current = null; }
 
-  if (!project) return <main className="welcome"><section><span className="eyebrow">Local-first Moodle authoring</span><h1>WorkPath Author Local</h1><p>Projects and assets live on this computer. Moodle Book packages are compiled by the local service.</p><div className="welcome-actions"><button className="primary" onClick={() => void createNew()}>Create project</button><button onClick={() => importInput.current?.click()}>Import original project</button><input ref={importInput} className="visually-hidden" type="file" accept=".json,.workpath.json,.uoclearn.json,application/json" onChange={(event) => { const file = event.target.files?.[0]; if (file) void importLegacy(file); }} /></div><div className="project-list">{projects.map((item) => <button key={item.id} onClick={() => void openProject(item.id)}><strong>{item.title}</strong><small>Revision {item.revision} · {new Date(item.updatedAt).toLocaleString()}</small></button>)}</div><footer aria-live="polite">{status}</footer></section></main>;
+  if (!project) return <main className="welcome"><section><span className="eyebrow">Local-first Moodle authoring</span><h1>WorkPath Author Local</h1><p>Projects and assets live on this computer. Moodle Book packages are compiled by the local service.</p><div className="welcome-actions"><button className="primary" onClick={() => void createNew()}>Create project</button><button onClick={() => bookWorkbookInput.current?.click()}>Import Excel Book</button><button onClick={() => importInput.current?.click()}>Import original project</button><input ref={bookWorkbookInput} className="visually-hidden" type="file" accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" onChange={(event) => { const file = event.target.files?.[0]; if (file) void importBookWorkbook(file); }} /><input ref={importInput} className="visually-hidden" type="file" accept=".json,.workpath.json,.uoclearn.json,application/json" onChange={(event) => { const file = event.target.files?.[0]; if (file) void importLegacy(file); }} /></div><div className="project-list">{projects.map((item) => <div className="project-list-item" key={item.id}><button className="project-open" onClick={() => void openProject(item.id)}><strong>{item.title}</strong><small>Revision {item.revision} · {new Date(item.updatedAt).toLocaleString()}</small></button><button className="project-delete" title={`Delete ${item.title}`} aria-label={`Delete ${item.title}`} onClick={() => void deleteProject(item)}><Trash2 size={18} aria-hidden="true" /></button></div>)}</div><footer aria-live="polite">{status}</footer></section></main>;
   if (previewMode) return <PreviewPage project={project} selectedPageId={selectedPageId} assetUrl={assetUrl} onSelectPage={setSelectedPageId} onReturn={() => setPreviewMode(false)} />;
 
   const page = selected?.kind === "chapter" ? selected.chapter : selected?.subchapter;
   return <div className="app-shell">
-    <header><div><span className="eyebrow">WorkPath Author Local</span><input value={project.title} onChange={(event) => change((current) => ({ ...current, title: event.target.value }))} /></div><nav><a className="header-button" href="/api/storyboard/template.xlsx">Excel template</a><button onClick={() => { setProject(null); setProjectId(""); void refreshProjects(); }}>Projects</button><button onClick={() => void save()}>Save</button><button onClick={() => setPreviewMode(true)}>Preview</button><button className="primary" onClick={() => void exportBook()}>Export Moodle Book</button></nav></header>
+    <header><div><span className="eyebrow">WorkPath Author Local</span><input value={project.title} onChange={(event) => change((current) => ({ ...current, title: event.target.value }))} /></div><nav><a className="header-button" href="/api/storyboard/template.xlsx">Excel template</a><button onClick={() => { setProject(null); setProjectId(""); void refreshProjects(); }}>Projects</button><button onClick={() => void save()}>Save</button><button onClick={() => setPreviewMode(true)}>Preview</button><button onClick={() => void exportBookStoryboard()}>Export Excel Book</button><button className="primary" onClick={() => void exportBook()}>Export Moodle Book</button></nav></header>
     <input ref={storyboardInput} className="visually-hidden" type="file" accept=".xlsx,.csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,text/csv" onChange={(event) => { const file = event.target.files?.[0]; if (file) void verifyStoryboard(file); }} />
     <aside className="structure-sidebar"><span className="eyebrow">Book structure</span>{chapters.map((chapter, chapterIndex) => <section key={chapter.id}><div className="structure-row"><button className={`chapter-link${chapter.id === selectedPageId ? " active" : ""}`} onClick={() => setSelectedPageId(chapter.id)}><strong>{chapter.title}</strong><small>Chapter</small></button><div className="structure-actions"><button title="Move chapter up" disabled={chapterIndex === 0} onClick={() => moveChapter(chapterIndex, -1)}>↑</button><button title="Move chapter down" disabled={chapterIndex === chapters.length - 1} onClick={() => moveChapter(chapterIndex, 1)}>↓</button><button className="danger" title="Delete chapter" onClick={() => deleteChapter(chapter.id)}>×</button></div></div>{[...chapter.subchapters].sort((a, b) => a.order - b.order).map((subchapter, subchapterIndex, sorted) => <div className="structure-row subchapter-row" key={subchapter.id}><button className={`subchapter-link${subchapter.id === selectedPageId ? " active" : ""}`} onClick={() => setSelectedPageId(subchapter.id)}>{subchapter.title}</button><div className="structure-actions"><button title="Move subchapter up" disabled={subchapterIndex === 0} onClick={() => moveSubchapter(chapter.id, subchapterIndex, -1)}>↑</button><button title="Move subchapter down" disabled={subchapterIndex === sorted.length - 1} onClick={() => moveSubchapter(chapter.id, subchapterIndex, 1)}>↓</button><button className="danger" title="Delete subchapter" onClick={() => deleteSubchapter(chapter.id, subchapter.id)}>×</button></div></div>)}<div className="subchapter-buttons"><button onClick={() => addSubchapter(chapter.id)}>+ Add subchapter</button><button onClick={() => beginStoryboardImport("subchapter", chapter.id)}>Import Excel</button></div></section>)}<div className="chapter-buttons"><button onClick={addChapter}>+ Add chapter</button><button onClick={() => beginStoryboardImport("chapter")}>Import chapter</button></div></aside>
     <main className="editor">{page ? <article><section className="topic-settings"><div className="page-heading-row"><span className="eyebrow">{selected?.kind === "chapter" ? "Chapter" : `Subchapter of ${selected?.chapter.title}`}</span><div><a href={`/api/projects/${projectId}/pages/${page.id}/storyboard.xlsx`}>Export Excel</a><a href={`/api/projects/${projectId}/pages/${page.id}/storyboard.csv`}>Export CSV</a></div></div><input className="topic-title" aria-label="Page title" value={page.title} onChange={(event) => updateSelected((current) => ({ ...current, title: event.target.value }))} /><textarea className="summary" aria-label="Page purpose" placeholder="Learner-facing purpose…" value={page.summary} onChange={(event) => updateSelected((current) => ({ ...current, summary: event.target.value }))} />{selected?.kind === "chapter" && <><label className="chapter-enabled"><input type="checkbox" checked={selected.chapter.enabled} onChange={(event) => updateSelected((current) => ({ ...current, enabled: event.target.checked }))} /> Include this chapter in Moodle export</label><p className="structure-hint">This chapter can contain learning blocks directly. Add subchapters only when learners benefit from another level of breakdown.</p></>}</section><BlockCanvas blocks={page.blocks} assets={project.assets} assetUrl={assetUrl} onUpload={uploadBlockImage} onChange={(blocks) => updateSelected((current) => ({ ...current, blocks }))} /></article> : <div className="empty"><h2>Add a chapter to begin</h2><button onClick={addChapter}>+ Add chapter</button></div>}</main>

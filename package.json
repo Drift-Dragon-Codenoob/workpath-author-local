@@ -6,6 +6,7 @@
   "workspaces": ["apps/*", "packages/*"],
   "scripts": {
     "dev": "npm run build -w @workpath/core && concurrently -k -n api,web -c blue,magenta \"npm run dev -w @workpath/server\" \"npm run dev -w @workpath/web\"",
+    "launch": "node run-workpath.mjs",
     "build": "npm run build -w @workpath/core && npm run build -w @workpath/web && npm run build -w @workpath/server",
     "start": "npm run start -w @workpath/server",
     "typecheck": "npm run build -w @workpath/core && npm run typecheck --workspaces --if-present",

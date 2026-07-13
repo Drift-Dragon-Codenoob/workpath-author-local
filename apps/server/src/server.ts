@@ -4,8 +4,8 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import type { WorkPathProject } from "@workpath/core";
 import { verifyStoryboardRows, type StoryboardRowInput } from "@workpath/core";
-import { addProjectImage, createStoredProject, exportProject, getProjectPage, importStoredProject, importStoryboardPage, initialiseStore, listProjects, loadProject, readProjectAsset, saveProject } from "./store.js";
-import { createStoryboardTemplate, exportStoryboard, exportStoryboardCsv, parseStoryboardFile } from "./storyboardWorkbook.js";
+import { addProjectImage, createStoredProject, deleteStoredProject, exportProject, getProjectPage, importStoredProject, importStoryboardBook, importStoryboardPage, initialiseStore, listProjects, loadProject, readProjectAsset, saveProject } from "./store.js";
+import { createStoryboardTemplate, exportBookStoryboard, exportStoryboard, exportStoryboardCsv, parseBookStoryboard, parseStoryboardFile } from "./storyboardWorkbook.js";
 
 const host = process.env.HOST || "127.0.0.1";
 const port = Number(process.env.PORT || 4174);
@@ -41,7 +41,7 @@ async function binaryBody(request: IncomingMessage) {
 
 async function api(request: IncomingMessage, response: ServerResponse, url: URL) {
   if (request.method === "OPTIONS") {
-    response.writeHead(204, { "Access-Control-Allow-Origin": "http://127.0.0.1:4173", "Access-Control-Allow-Headers": "content-type,x-filename,x-project-revision", "Access-Control-Allow-Methods": "GET,POST,PUT,OPTIONS" });
+    response.writeHead(204, { "Access-Control-Allow-Origin": "http://127.0.0.1:4173", "Access-Control-Allow-Headers": "content-type,x-filename,x-project-revision", "Access-Control-Allow-Methods": "GET,POST,PUT,DELETE,OPTIONS" });
     return response.end();
   }
   if (url.pathname === "/api/projects" && request.method === "GET") return json(response, 200, await listProjects());
@@ -53,6 +53,16 @@ async function api(request: IncomingMessage, response: ServerResponse, url: URL)
     const bytes = await createStoryboardTemplate(); response.writeHead(200, { "Content-Type": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", "Content-Disposition": "attachment; filename=workpath-storyboard-template.xlsx" }); return response.end(Buffer.from(bytes));
   }
   if (url.pathname === "/api/storyboard/verify" && request.method === "POST") return json(response, 200, await parseStoryboardFile(await binaryBody(request), url.searchParams.get("filename") || "storyboard.xlsx"));
+  if (url.pathname === "/api/import/storyboard-book" && request.method === "POST") {
+    const verification = await parseBookStoryboard(await binaryBody(request));
+    if (!verification.valid) return json(response, 400, { error: "Book workbook has validation errors.", verification });
+    return json(response, 201, { ...await importStoryboardBook(verification), verification });
+  }
+  const bookStoryboardExport = url.pathname.match(/^\/api\/projects\/([a-z0-9-]+)\/storyboard\.xlsx$/);
+  if (bookStoryboardExport?.[1] && request.method === "GET") {
+    const project = await loadProject(bookStoryboardExport[1]); const bytes = await exportBookStoryboard(project);
+    response.writeHead(200, { "Content-Type": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", "Content-Disposition": `attachment; filename="${bookStoryboardExport[1]}-storyboard.xlsx"` }); return response.end(Buffer.from(bytes));
+  }
   const storyboardExport = url.pathname.match(/^\/api\/projects\/([a-z0-9-]+)\/pages\/([a-f0-9-]{36})\/storyboard\.(xlsx|csv)$/);
   if (storyboardExport?.[1] && storyboardExport[2] && storyboardExport[3] && request.method === "GET") {
     const page = await getProjectPage(storyboardExport[1], storyboardExport[2]);
@@ -89,6 +99,7 @@ async function api(request: IncomingMessage, response: ServerResponse, url: URL)
   }
   if (request.method === "GET") return json(response, 200, await loadProject(id));
   if (request.method === "PUT") return json(response, 200, await saveProject(id, await body(request) as WorkPathProject));
+  if (request.method === "DELETE") return json(response, 200, await deleteStoredProject(id));
   return json(response, 405, { error: "Method not allowed" });
 }
 
@@ -96,10 +107,14 @@ async function serveWeb(response: ServerResponse, url: URL) {
   const requested = url.pathname === "/" ? "index.html" : url.pathname.replace(/^\/+/, "");
   const target = path.resolve(webDist, requested);
   if (!target.startsWith(webDist)) { response.writeHead(403); return response.end(); }
-  let data: Buffer;
-  try { data = await readFile(target); } catch { data = await readFile(path.join(webDist, "index.html")); }
-  const extension = path.extname(target);
-  response.writeHead(200, { "Content-Type": extension === ".js" ? "text/javascript" : extension === ".css" ? "text/css" : "text/html" });
+  let data: Buffer; let servedTarget = target;
+  try { data = await readFile(target); } catch {
+    if (path.extname(requested)) { response.writeHead(404); return response.end(); }
+    servedTarget = path.join(webDist, "index.html"); data = await readFile(servedTarget);
+  }
+  const extension = path.extname(servedTarget);
+  const contentTypes: Record<string, string> = { ".html": "text/html; charset=utf-8", ".js": "text/javascript; charset=utf-8", ".css": "text/css; charset=utf-8", ".json": "application/json; charset=utf-8", ".svg": "image/svg+xml", ".png": "image/png", ".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".gif": "image/gif", ".webp": "image/webp", ".woff": "font/woff", ".woff2": "font/woff2" };
+  response.writeHead(200, { "Content-Type": contentTypes[extension] || "application/octet-stream" });
   response.end(data);
 }
 

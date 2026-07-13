@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { createWidgetBlock, storyboardRowFromBlock, verifyStoryboardRows } from "./index.js";
+import { STORYBOARD_BLOCK_TYPES, WIDGET_DEFINITIONS, createWidgetBlock, storyboardRowFromBlock, verifyStoryboardRows } from "./index.js";
 
 test("verifies a representative storyboard and preserves author-only mapping", () => {
   const result = verifyStoryboardRows([
@@ -42,4 +42,15 @@ test("blocks unsafe HTML supplied through Settings JSON", () => {
   const result = verifyStoryboardRows([{ topic: "Unsafe", order: 1, blockType: "Rich text", content: "", mapping: "", settingsJson: JSON.stringify({ html: '<img src="x" onerror="alert(1)">' }) }]);
   assert.equal(result.valid, false);
   assert.match(result.messages[0]?.message ?? "", /unsafe/);
+});
+
+test("round-trips every structured block type through Settings JSON", () => {
+  const rows = WIDGET_DEFINITIONS.map((definition, index) => storyboardRowFromBlock("Complete library", createWidgetBlock(definition.key), index + 1));
+  const result = verifyStoryboardRows(rows);
+  assert.equal(STORYBOARD_BLOCK_TYPES.length, 21);
+  assert.equal(result.rows.length, WIDGET_DEFINITIONS.length);
+  assert.equal(result.valid, false, "media defaults should still require accessible image selections");
+  assert.ok(result.rows.every((row) => row.block?.type === "widget"));
+  const gallery = rows.find((row) => row.blockType === "Image gallery / carousel");
+  assert.doesNotMatch(gallery?.settingsJson ?? "", /imageAssetId":"[^"].+/);
 });

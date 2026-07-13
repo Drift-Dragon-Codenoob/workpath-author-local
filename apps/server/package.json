@@ -10,6 +10,6 @@
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "tsx --test src/*.test.ts"
   },
-  "dependencies": { "@workpath/core": "*", "exceljs": "^4.4.0" },
+  "dependencies": { "@workpath/core": "*", "exceljs": "^4.4.0", "jszip": "^3.10.1" },
   "devDependencies": { "@types/node": "^24.10.1", "tsx": "^4.20.6" }
 }

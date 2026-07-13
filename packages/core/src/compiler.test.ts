@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import JSZip from "jszip";
-import { compileMoodleBook, createProject } from "./index.js";
+import { compileMoodleBook, createProject, createWidgetBlock } from "./index.js";
 
 test("compiles chapters and _sub topics for Moodle Book import", async () => {
   const project = createProject("Test book");
@@ -32,4 +32,20 @@ test("packages image assets at the exact path used by widget HTML", async () => 
   assert.match(await zip.file("01-00-image-topic.html")!.async("text"), new RegExp(path.replaceAll(".", "\\.")));
   assert.equal(Object.keys(zip.files).filter((name) => name.endsWith("_sub.html")).length, 0);
   assert.match(result.report.join(" "), /0 subchapter/);
+});
+
+test("exports Moodle books with visible fallbacks for missing images", async () => {
+  const project = createProject("Fallback book");
+  const withAlt = createWidgetBlock("image-text"); withAlt.params.altText = "Technician reviewing a workplace request";
+  const placeholder = createWidgetBlock("image");
+  project.chapters[0]!.blocks = [withAlt, placeholder];
+  const result = await compileMoodleBook({ project, readAsset: async () => new Uint8Array() });
+  const zip = await JSZip.loadAsync(result.bytes); const html = await zip.file("01-00-chapter-1.html")!.async("text");
+  assert.match(html, />Technician reviewing a workplace request</); assert.match(html, />Placeholder image</);
+  assert.ok(result.report.some((entry) => entry.includes("Warning:") && entry.includes("Choose an image")));
+});
+
+test("still blocks an uploaded image that has no alternative text", async () => {
+  const project = createProject("Unsafe image"); const image = createWidgetBlock("image"); image.params.imageAssetId = "asset"; project.chapters[0]!.blocks = [image];
+  await assert.rejects(() => compileMoodleBook({ project, readAsset: async () => new Uint8Array() }), /Alternative text is required/);
 });

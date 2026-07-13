@@ -1,4 +1,4 @@
-import { mkdir, readFile, readdir, rename, writeFile } from "node:fs/promises";
+import { mkdir, readFile, readdir, rename, rm, writeFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import path from "node:path";
 import { assertProject, compileMoodleBook, createProject, importLegacyProject, migrateProject, type AssetRecord, type Chapter, type ContentBlock, type Subchapter, type WorkPathProject } from "@workpath/core";
@@ -39,6 +39,12 @@ export async function createStoredProject(title: string) {
   return { id, project };
 }
 
+export async function deleteStoredProject(id: string) {
+  const project = await loadProject(id);
+  await rm(projectDir(id), { recursive: true, force: false });
+  return { id: safeId(id), title: project.title };
+}
+
 export async function importStoredProject(value: unknown) {
   const imported = importLegacyProject(value);
   const id = `${slug(imported.project.title)}-${Date.now().toString(36)}`;
@@ -46,6 +52,47 @@ export async function importStoredProject(value: unknown) {
   await mkdir(path.join(projectDir(id), "exports"), { recursive: true });
   const project = await saveProject(id, imported.project, false);
   return { id, project, warnings: imported.warnings, sourceSchemaVersion: imported.sourceSchemaVersion };
+}
+
+export async function importStoryboardBook(input: { title: string; unitCode: string; pages: Array<{ worksheet: string; kind: "chapter" | "subchapter"; parentWorksheet?: string; order: number; enabled: boolean; title: string; summary: string; blocks: ContentBlock[] }> }) {
+  const id = `${slug(input.title)}-${Date.now().toString(36)}`;
+  const project = createProject(input.title.trim() || "Imported Excel Book");
+  const chapterPages = input.pages.filter((page) => page.kind === "chapter").sort((a, b) => a.order - b.order);
+  project.unitCode = input.unitCode;
+  project.chapters = chapterPages.map((page, chapterIndex): Chapter => ({
+    id: crypto.randomUUID(), title: page.title, summary: page.summary, order: chapterIndex + 1, enabled: page.enabled, blocks: page.blocks,
+    subchapters: input.pages.filter((entry) => entry.kind === "subchapter" && entry.parentWorksheet === page.worksheet).sort((a, b) => a.order - b.order).map((entry, subchapterIndex): Subchapter => ({ id: crypto.randomUUID(), title: entry.title, summary: entry.summary, order: subchapterIndex + 1, blocks: entry.blocks })),
+  }));
+  await mkdir(path.join(projectDir(id), "assets", "originals"), { recursive: true });
+  await mkdir(path.join(projectDir(id), "exports"), { recursive: true });
+  const placeholderId = crypto.randomUUID();
+  const placeholderResult = applyImportedImagePlaceholders(project.chapters, placeholderId);
+  project.chapters = placeholderResult.chapters;
+  if (placeholderResult.used) {
+    const placeholderBytes = new TextEncoder().encode(placeholderImageSvg());
+    const asset: AssetRecord = { id: placeholderId, filename: "placeholder-image.svg", mimeType: "image/svg+xml", size: placeholderBytes.length, relativePath: `assets/originals/${placeholderId}-placeholder-image.svg` };
+    await writeFile(path.join(projectDir(id), asset.relativePath), placeholderBytes); project.assets = [asset];
+  }
+  return { id, project: await saveProject(id, project, false) };
+}
+
+export function applyImportedImagePlaceholders(chapters: Chapter[], placeholderId: string) {
+  let used = false;
+  const updateBlock = (block: ContentBlock): ContentBlock => {
+    if (block.type !== "widget") return block;
+    if (["image", "image-text", "hotspot-image"].includes(block.widgetKey) && !block.params.imageAssetId && !String(block.params.altText ?? "").trim()) { used = true; return { ...block, params: { ...block.params, imageAssetId: placeholderId, altText: "Placeholder image" } }; }
+    if (block.widgetKey === "image-gallery" && Array.isArray(block.params.images)) {
+      const images = (block.params.images as Array<Record<string, unknown>>).map((image) => { if (image.imageAssetId || String(image.altText ?? "").trim()) return image; used = true; return { ...image, imageAssetId: placeholderId, altText: "Placeholder image" }; });
+      return { ...block, params: { ...block.params, images } };
+    }
+    return block;
+  };
+  const updatedChapters = chapters.map((chapter) => ({ ...chapter, blocks: chapter.blocks.map(updateBlock), subchapters: chapter.subchapters.map((subchapter) => ({ ...subchapter, blocks: subchapter.blocks.map(updateBlock) })) }));
+  return { used, chapters: updatedChapters };
+}
+
+function placeholderImageSvg() {
+  return `<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="675" viewBox="0 0 1200 675" role="img" aria-labelledby="title description"><title id="title">Placeholder image</title><desc id="description">Replace this placeholder with the intended image.</desc><rect width="1200" height="675" fill="#ffffff"/><rect x="2" y="2" width="1196" height="671" fill="none" stroke="#aebbc9" stroke-width="4"/><text x="600" y="338" fill="#52647b" font-family="Arial, sans-serif" font-size="56" text-anchor="middle" dominant-baseline="middle">Placeholder image</text></svg>`;
 }
 
 export async function loadProject(id: string): Promise<WorkPathProject> {

@@ -25,8 +25,9 @@ export async function compileMoodleBook({ project, readAsset }: CompileInput): P
   const chapters = [...project.chapters].filter((item) => item.enabled).sort((a, b) => a.order - b.order);
   if (!chapters.length) throw new Error("The book needs at least one enabled chapter.");
   const pages = chapters.flatMap((chapter) => [{ title: chapter.title, blocks: chapter.blocks }, ...chapter.subchapters.map((subchapter) => ({ title: subchapter.title, blocks: subchapter.blocks }))]);
-  const issues = pages.flatMap((page) => page.blocks.flatMap(validateBlock).map((issue) => `${page.title}: ${issue.message}`));
-  const blockingIssues = issues.filter((issue) => !issue.endsWith("Rich text block is empty."));
+  const issueDetails = pages.flatMap((page) => page.blocks.flatMap((block) => validateBlock(block).map((issue) => ({ text: `${page.title}: ${issue.message}`, blocking: issue.message !== "Rich text block is empty." && !isMissingImageFallback(block, issue.message) }))));
+  const issues = issueDetails.map((issue) => issue.text);
+  const blockingIssues = issueDetails.filter((issue) => issue.blocking).map((issue) => issue.text);
   if (blockingIssues.length) throw new Error(`Resolve export validation issues: ${blockingIssues.join("; ")}`);
 
   let topicCount = 0;
@@ -50,6 +51,18 @@ export async function compileMoodleBook({ project, readAsset }: CompileInput): P
   report.push(`${chapters.length} chapter(s)`, `${topicCount} subchapter(s)`, `${project.assets.length} media file(s)`, ...issues.map((issue) => `Warning: ${issue}`), "Moodle Book import: ready");
   zip.file("workpath-import-report.txt", report.join("\n"));
   return { bytes: await zip.generateAsync({ type: "uint8array", compression: "DEFLATE", compressionOptions: { level: 6 } }), report };
+}
+
+function isMissingImageFallback(block: WorkPathProject["chapters"][number]["blocks"][number], message: string) {
+  if (block.type !== "widget") return false;
+  if ((block.widgetKey === "image" || block.widgetKey === "image-text") && !block.params.imageAssetId) return message === "Choose an image." || message === "Alternative text is required.";
+  if (block.widgetKey === "hotspot-image" && !block.params.imageAssetId) return message === "Choose a hotspot image." || message === "Hotspot image alternative text is required.";
+  if (block.widgetKey === "image-gallery" && Array.isArray(block.params.images)) {
+    const images = block.params.images as Array<Record<string, unknown>>;
+    if (message === "Choose an image for every gallery item.") return true;
+    if (message === "Alternative text is required for every gallery image.") return !images.some((image) => image.imageAssetId && !String(image.altText ?? "").trim());
+  }
+  return false;
 }
 
 function pageContent(title: string, summary: string, blocks: WorkPathProject["chapters"][number]["blocks"], project: WorkPathProject) {

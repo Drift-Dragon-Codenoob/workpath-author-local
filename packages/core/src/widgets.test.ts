@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { createWidgetBlock, renderContentBlock, validateBlock } from "./index.js";
+import { WIDGET_DEFINITIONS, createWidgetBlock, renderContentBlock, validateBlock } from "./index.js";
 
 test("creates and renders a widget from the shared registry", () => {
   const block = createWidgetBlock("accordion");
@@ -48,4 +48,40 @@ test("renders critical widget layout as inline styles for Moodle imports", () =>
   assert.match(html, /<td width="60%"/);
   assert.match(html, /<td width="40%"[^>]+padding:0 0 0 24px/);
   assert.match(html, /border:1px solid #aebbc9;padding:4px/);
+});
+
+test("creates and renders every registered block definition", () => {
+  assert.equal(WIDGET_DEFINITIONS.length, 20);
+  for (const definition of WIDGET_DEFINITIONS) {
+    const block = createWidgetBlock(definition.key);
+    assert.equal(block.widgetKey, definition.key);
+    assert.ok(renderContentBlock(block).trim(), `${definition.key} should render HTML`);
+  }
+});
+
+test("sanitises custom HTML and constrains embedded video providers", () => {
+  const custom = createWidgetBlock("custom-html");
+  custom.params.html = '<p onclick="alert(1)">Safe text</p><script>alert(1)</script><iframe src="https://example.com"></iframe>';
+  const html = renderContentBlock(custom);
+  assert.match(html, /Safe text/); assert.doesNotMatch(html, /onclick|script|iframe/i);
+  assert.match(validateBlock(custom)[0]?.message ?? "", /Custom HTML/);
+  const video = createWidgetBlock("video-embed"); video.params.url = "https://www.youtube.com/watch?v=abc123";
+  assert.match(renderContentBlock(video), /youtube-nocookie\.com\/embed\/abc123/); assert.deepEqual(validateBlock(video), []);
+  video.params.url = "https://unapproved.example/video"; assert.match(validateBlock(video)[0]?.message ?? "", /approved/);
+});
+
+test("renders nested gallery assets with accessible image metadata", () => {
+  const gallery = createWidgetBlock("image-gallery");
+  gallery.params.images = [{ imageAssetId: "asset", altText: "Workshop equipment", caption: "Equipment layout" }];
+  const html = renderContentBlock(gallery, [{ id: "asset", filename: "workshop.jpg", mimeType: "image/jpeg", size: 1, relativePath: "assets/originals/workshop.jpg" }]);
+  assert.match(html, /assets\/asset-workshop\.jpg/); assert.match(html, /alt="Workshop equipment"/); assert.deepEqual(validateBlock(gallery), []);
+});
+
+test("renders visible alt text when an image asset is unavailable", () => {
+  for (const key of ["image", "image-text", "hotspot-image"] as const) {
+    const block = createWidgetBlock(key); block.params.altText = "Diagram of the workplace process";
+    const html = renderContentBlock(block); assert.match(html, /role="img"/); assert.match(html, />Diagram of the workplace process</);
+  }
+  const gallery = createWidgetBlock("image-gallery"); gallery.params.images = [{ imageAssetId: "", altText: "Workshop overview", caption: "" }];
+  assert.match(renderContentBlock(gallery), />Workshop overview</);
 });
