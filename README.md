@@ -62,6 +62,8 @@ Select **Add block** to open the searchable, categorized block library. It curre
 
 Alongside rich text, notes, accordions, checklists, quotes, images and tables, the expanded library includes card grids, responsive columns, resource cards, styled lists, code snippets, three knowledge-check formats, flip cards, image hotspots, custom HTML, image galleries and video embeds. Custom HTML rejects executable markup. Video embeds accept approved YouTube, Vimeo, Microsoft Stream and SharePoint URLs, with a linked fallback when embedding is unavailable.
 
+Flip cards use an image on the front and rich text on the back. Selecting a card rotates it in 3D, while its native disclosure state keeps the interaction keyboard accessible and readable when animation is reduced. Each card requires alternative text when an image is selected; an unfinished image uses the normal visible alt-text or placeholder fallback during Moodle export.
+
 ## Excel storyboards
 
 See [EXCEL_WORKBOOKS.md](./EXCEL_WORKBOOKS.md) for the complete chapter and whole-book `.xlsx` contract, generation rules, block names, image behavior and troubleshooting guidance.

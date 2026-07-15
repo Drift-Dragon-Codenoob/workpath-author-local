@@ -236,6 +236,26 @@ Rules:
 
 WorkPath exports every structured block with exact `Settings JSON`, including newer block types. This makes chapter and whole-book exports suitable as generation templates.
 
+A flip card uses an image-only front and a rich-text back. Its structured shape is:
+
+```json
+{
+  "definitionVersion": "2.0.0",
+  "params": {
+    "cards": [
+      {
+        "imageAssetId": "",
+        "altText": "Describe the intended front image",
+        "backTitle": "Card heading",
+        "backBody": "<p>Text revealed when the card flips.</p>"
+      }
+    ]
+  }
+}
+```
+
+Leave `imageAssetId` empty in a workbook and select or upload the image after import. Alternative text remains visible as the fallback until then.
+
 ## Images
 
 Spreadsheet workbooks do not embed WorkPath project assets. Export recursively clears every setting whose name ends in `AssetId`.

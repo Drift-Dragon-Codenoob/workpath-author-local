@@ -85,3 +85,22 @@ test("renders visible alt text when an image asset is unavailable", () => {
   const gallery = createWidgetBlock("image-gallery"); gallery.params.images = [{ imageAssetId: "", altText: "Workshop overview", caption: "" }];
   assert.match(renderContentBlock(gallery), />Workshop overview</);
 });
+
+test("renders flip cards with an image front, text back and animated disclosure state", () => {
+  const block = createWidgetBlock("flip-cards");
+  block.params.cards = [{ imageAssetId: "asset", altText: "A worker checking a safety plan", backTitle: "Plan first", backBody: "<p>Review the hazards before work begins.</p>" }];
+  const html = renderContentBlock(block, [{ id: "asset", filename: "safety-plan.jpg", mimeType: "image/jpeg", size: 1, relativePath: "assets/originals/safety-plan.jpg" }]);
+  assert.match(html, /workpath-flip-card\[open\] \.workpath-flip-card-inner\{transform:rotateY\(180deg\)\}/);
+  assert.match(html, /<img src="assets\/asset-safety-plan\.jpg" alt="A worker checking a safety plan"/);
+  assert.match(html, /class="workpath-flip-card-face workpath-flip-card-back"><h3>Plan first<\/h3><p>Review the hazards/);
+  assert.doesNotMatch(html, /frontTitle|frontBody/);
+  assert.deepEqual(validateBlock(block), []);
+});
+
+test("keeps legacy flip-card front images compatible", () => {
+  const block = createWidgetBlock("flip-cards");
+  block.params.cards = [{ frontAssetId: "asset", altText: "Legacy image", backTitle: "Legacy answer", backBody: "<p>Preserved text.</p>" }];
+  const html = renderContentBlock(block, [{ id: "asset", filename: "legacy.png", mimeType: "image/png", size: 1, relativePath: "assets/originals/legacy.png" }]);
+  assert.match(html, /assets\/asset-legacy\.png/);
+  assert.deepEqual(validateBlock(block), []);
+});

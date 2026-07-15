@@ -38,10 +38,11 @@ test("exports Moodle books with visible fallbacks for missing images", async () 
   const project = createProject("Fallback book");
   const withAlt = createWidgetBlock("image-text"); withAlt.params.altText = "Technician reviewing a workplace request";
   const placeholder = createWidgetBlock("image");
-  project.chapters[0]!.blocks = [withAlt, placeholder];
+  const flipCards = createWidgetBlock("flip-cards"); flipCards.params.cards = [{ imageAssetId: "", altText: "A team discussing the plan", backTitle: "Discuss the plan", backBody: "<p>Confirm responsibilities before starting.</p>" }];
+  project.chapters[0]!.blocks = [withAlt, placeholder, flipCards];
   const result = await compileMoodleBook({ project, readAsset: async () => new Uint8Array() });
   const zip = await JSZip.loadAsync(result.bytes); const html = await zip.file("01-00-chapter-1.html")!.async("text");
-  assert.match(html, />Technician reviewing a workplace request</); assert.match(html, />Placeholder image</);
+  assert.match(html, />Technician reviewing a workplace request</); assert.match(html, />Placeholder image</); assert.match(html, />A team discussing the plan</); assert.match(html, /rotateY\(180deg\)/);
   assert.ok(result.report.some((entry) => entry.includes("Warning:") && entry.includes("Choose an image")));
 });
 

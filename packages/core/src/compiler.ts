@@ -62,6 +62,11 @@ function isMissingImageFallback(block: WorkPathProject["chapters"][number]["bloc
     if (message === "Choose an image for every gallery item.") return true;
     if (message === "Alternative text is required for every gallery image.") return !images.some((image) => image.imageAssetId && !String(image.altText ?? "").trim());
   }
+  if (block.widgetKey === "flip-cards" && Array.isArray(block.params.cards)) {
+    const cards = block.params.cards as Array<Record<string, unknown>>;
+    if (message === "Choose an image for every flip card.") return true;
+    if (message === "Alternative text is required for every flip card image.") return !cards.some((card) => (card.imageAssetId || card.frontAssetId) && !String(card.altText ?? "").trim());
+  }
   return false;
 }
 
