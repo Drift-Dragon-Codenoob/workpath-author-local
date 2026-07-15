@@ -29,6 +29,8 @@ Override it with `WORKPATH_PROJECTS_DIR`.
 
 The launcher resolves the repository from its own file location, so the folder can be moved or shared without editing paths.
 
+For a pilot handover, send the complete release ZIP rather than copying an existing development folder. The recipient needs Node.js 24 with npm 11, internet access on first launch, and permission to run local PowerShell and npm commands. WorkPath verifies these versions and installs the exact dependency versions recorded in `package-lock.json`. See [PILOT_GUIDE.md](./PILOT_GUIDE.md) for recipient instructions and current packaging limitations.
+
 - On Windows, double-click **Run WorkPath.cmd**. If the folder is under `\\wsl.localhost`, the wrapper delegates to that WSL distribution instead of running Windows npm against Linux files. Native Windows folders use Windows Node normally.
 - In WSL or Linux, run `./run-workpath.sh`.
 - On any supported environment, run `node run-workpath.mjs` or `npm run launch`.

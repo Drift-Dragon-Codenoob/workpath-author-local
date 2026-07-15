@@ -1,4 +1,5 @@
-import { existsSync, readFileSync } from "node:fs";
+import { createHash } from "node:crypto";
+import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { createServer } from "node:net";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -7,11 +8,47 @@ import { spawn, spawnSync } from "node:child_process";
 const root = dirname(fileURLToPath(import.meta.url));
 const npm = "npm";
 const windows = process.platform === "win32";
+const requiredNodeMajor = 24;
+const requiredNpmMajor = 11;
+const installStateFile = join(root, "node_modules", ".workpath-install-state.json");
 
 function run(command, args) {
   const result = spawnSync(command, args, { cwd: root, stdio: "inherit", shell: windows });
   if (result.error) throw result.error;
   if (result.status !== 0) throw new Error(`${command} ${args.join(" ")} failed with exit code ${result.status}.`);
+}
+
+function commandVersion(command) {
+  const result = spawnSync(command, ["--version"], { cwd: root, encoding: "utf8", shell: windows });
+  if (result.error || result.status !== 0) throw new Error(`${command} is required but was not found. Install Node.js ${requiredNodeMajor}, which includes npm, then try again.`);
+  return String(result.stdout || result.stderr).trim().replace(/^v/, "");
+}
+
+function majorVersion(value) {
+  const major = Number(value.split(".")[0]);
+  if (!Number.isInteger(major)) throw new Error(`Could not understand version ${value}.`);
+  return major;
+}
+
+function expectedInstallState(nodeVersion, npmVersion) {
+  const lockFile = join(root, "package-lock.json");
+  if (!existsSync(lockFile)) throw new Error("package-lock.json is missing. Re-download the complete WorkPath package.");
+  return {
+    platform: process.platform,
+    architecture: process.arch,
+    nodeMajor: majorVersion(nodeVersion),
+    npmMajor: majorVersion(npmVersion),
+    packageLockSha256: createHash("sha256").update(readFileSync(lockFile)).digest("hex")
+  };
+}
+
+function dependenciesAreCurrent(expected) {
+  if (!existsSync(installStateFile)) return false;
+  try {
+    return JSON.stringify(JSON.parse(readFileSync(installStateFile, "utf8"))) === JSON.stringify(expected);
+  } catch {
+    return false;
+  }
 }
 
 function portAvailable(port) {
@@ -53,8 +90,16 @@ async function waitForApp(url, child) {
 
 try {
   console.log(`WorkPath folder: ${root}`);
-  const dependencyMarker = join(root, "node_modules", ".bin", windows ? "tsc.cmd" : "tsc");
-  if (!existsSync(dependencyMarker)) { console.log("Installing WorkPath dependencies for this operating environment..."); run(npm, ["install"]); }
+  const nodeVersion = process.version.replace(/^v/, "");
+  if (majorVersion(nodeVersion) !== requiredNodeMajor) throw new Error(`WorkPath requires Node.js ${requiredNodeMajor}. Detected Node.js ${nodeVersion}. Install Node.js ${requiredNodeMajor}, then try again.`);
+  const npmVersion = commandVersion(npm);
+  if (majorVersion(npmVersion) !== requiredNpmMajor) throw new Error(`WorkPath requires npm ${requiredNpmMajor}. Detected npm ${npmVersion}. Install Node.js ${requiredNodeMajor} with npm ${requiredNpmMajor}, then try again.`);
+  const installState = expectedInstallState(nodeVersion, npmVersion);
+  if (!dependenciesAreCurrent(installState)) {
+    console.log("Installing the verified WorkPath dependencies for this computer...");
+    run(npm, ["ci", "--no-audit", "--no-fund"]);
+    writeFileSync(installStateFile, `${JSON.stringify(installState, null, 2)}\n`);
+  }
   console.log("Preparing WorkPath..."); run(npm, ["run", "build"]);
   const port = await choosePort(); const url = `http://127.0.0.1:${port}`;
   const child = spawn(npm, ["start"], { cwd: root, env: { ...process.env, HOST: "127.0.0.1", PORT: String(port) }, stdio: "inherit", shell: windows });
