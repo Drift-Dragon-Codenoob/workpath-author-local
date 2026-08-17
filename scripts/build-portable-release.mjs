@@ -70,7 +70,8 @@ rmSync(releaseDir, { recursive: true, force: true }); rmSync(releaseZip, { force
 mkdirSync(join(releaseDir, "apps", "server", "dist"), { recursive: true });
 copyFileSync(join(root, "apps", "server", "dist", "server.bundle.mjs"), join(releaseDir, "apps", "server", "dist", "server.bundle.mjs"));
 copyTree(join(root, "apps", "web", "dist"), join(releaseDir, "apps", "web", "dist"));
-for (const filename of ["Run WorkPath.cmd", "Run WorkPath.ps1", "run-workpath.mjs", "README.md", "PILOT_GUIDE.md", "THIRD_PARTY_NOTICES.md"]) copyFileSync(join(root, filename), join(releaseDir, filename));
+for (const filename of ["Run WorkPath.cmd", "Run WorkPath.ps1", "run-workpath.mjs", "README.md", "PILOT_GUIDE.md", "LICENSE", "THIRD_PARTY_NOTICES.md"]) copyFileSync(join(root, filename), join(releaseDir, filename));
+writeFileSync(join(releaseDir, "SOURCE.md"), `# Corresponding source\n\nThis portable package was built from WorkPath Author Local v${appVersion}.\n\nThe complete corresponding source is available at:\n\nhttps://github.com/Drift-Dragon-Codenoob/workpath-author-local/tree/v${appVersion}\n\nBuild instructions are in README.md. The portable package is produced with \`npm run release:windows\`.\n`);
 const packagedRuntime = join(releaseDir, ".workpath-runtime", runtimeName); mkdirSync(packagedRuntime, { recursive: true });
 copyFileSync(join(runtimeDir, "node.exe"), join(packagedRuntime, "node.exe"));
 if (existsSync(join(runtimeDir, "LICENSE"))) copyFileSync(join(runtimeDir, "LICENSE"), join(packagedRuntime, "LICENSE"));
