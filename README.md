@@ -126,4 +126,10 @@ See [CONTRIBUTING.md](./CONTRIBUTING.md) for development setup, checks and contr
 
 ## Licence
 
-A licence for WorkPath Author Local has not yet been selected. Until a licence file is added, default copyright applies; public visibility alone does not grant permission to reuse, modify or redistribute the project. Bundled dependencies retain their own licences—see [THIRD_PARTY_NOTICES.md](./THIRD_PARTY_NOTICES.md).
+Copyright © 2026 David Last.
+
+WorkPath Author Local is free software licensed under the [GNU General Public License v3.0 or later](./LICENSE). You may use, study, modify and redistribute it under those terms. Distributed modified versions must preserve the licence and make their corresponding source available.
+
+GPL permissions already granted for a published version cannot be withdrawn. The copyright holder may separately license original WorkPath code under other terms, but contributed code and GPL dependencies cannot be included in a proprietary edition without the necessary additional permissions.
+
+Bundled dependencies retain their own licences—see [THIRD_PARTY_NOTICES.md](./THIRD_PARTY_NOTICES.md).

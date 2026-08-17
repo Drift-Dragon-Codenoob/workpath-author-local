@@ -43,4 +43,4 @@ Report security vulnerabilities privately as described in [SECURITY.md](./SECURI
 
 ## Licensing
 
-The project licence is not yet final. Contributions cannot be accepted until the maintainer publishes the chosen licence and contribution terms.
+WorkPath Author Local is licensed under GPL-3.0-or-later. By submitting a contribution, you agree to license it under the same terms and confirm that you have the right to do so. Do not submit employer-owned or third-party material without permission.

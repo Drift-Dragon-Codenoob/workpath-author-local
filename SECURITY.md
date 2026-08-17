@@ -21,3 +21,7 @@ If private vulnerability reporting is unavailable while the repository remains p
 ## Deployment boundary
 
 WorkPath is a single-user local application. Its HTTP service binds to `127.0.0.1` and has no network authentication. Do not expose it to a LAN, reverse proxy or the public internet. Managed-device distribution should also assess code signing and application-control requirements.
+
+## Reviewed dependency advisory
+
+ExcelJS 4.4.0 currently depends on UUID 8.3.2, which is covered by `GHSA-w5hq-g745-h8pq`. The advisory affects the UUID `v3()`, `v5()` and `v6()` APIs when caller-provided output buffers are used. ExcelJS imports only `v4()`, and WorkPath does not provide caller-controlled UUID output buffers. The current WorkPath threat assessment therefore rates this dependency path as low practical risk while upstream remediation is monitored. CI continues to fail on high-severity production advisories.

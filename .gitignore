@@ -6,3 +6,5 @@ dist/
 .workpath-data/
 .workpath-cache/
 release/
+401 working folder/
+*.inspect.ndjson

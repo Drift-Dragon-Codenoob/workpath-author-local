@@ -2,6 +2,8 @@
 
 WorkPath Author Local uses third-party software. Each component remains subject to its own licence; this notice does not replace those licence terms.
 
+WorkPath Author Local itself is licensed under GNU GPL-3.0-or-later. TinyMCE is loaded under its GPL mode; no TinyMCE commercial licence is claimed by this project.
+
 Key runtime components include:
 
 | Component | Licence |
@@ -19,4 +21,4 @@ Key runtime components include:
 
 The portable Windows package includes the Node.js `LICENSE` file beside its bundled runtime. Dependency package metadata and complete licence texts are available from the corresponding upstream distributions installed by `npm ci`.
 
-Before distributing WorkPath, confirm that the project's chosen licence and the intended TinyMCE usage comply with the applicable TinyMCE terms. This repository does not claim that a commercial TinyMCE licence has been obtained.
+The self-hosted editor is configured with `licenseKey="gpl"`. A proprietary distribution would require separate analysis, including an appropriate TinyMCE commercial licence or replacement of TinyMCE and permission for all contributed WorkPath code used in that distribution.

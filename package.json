@@ -1,7 +1,8 @@
 {
   "name": "workpath-author-local",
   "private": true,
-  "version": "0.1.0",
+  "version": "0.2.0-alpha.1",
+  "license": "GPL-3.0-or-later",
   "description": "Local-first visual authoring for accessible Moodle Books, with portable Windows delivery and ZIP/MBZ recovery.",
   "type": "module",
   "repository": {

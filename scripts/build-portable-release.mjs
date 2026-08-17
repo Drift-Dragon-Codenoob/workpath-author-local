@@ -6,6 +6,7 @@ import { fileURLToPath } from "node:url";
 import JSZip from "jszip";
 
 const root = join(dirname(fileURLToPath(import.meta.url)), "..");
+const appVersion = JSON.parse(readFileSync(join(root, "package.json"), "utf8")).version;
 const nodeVersion = "24.19.0";
 const runtimeName = `node-v${nodeVersion}-win-x64`;
 const cacheDir = join(root, ".workpath-cache", runtimeName);
@@ -73,7 +74,7 @@ for (const filename of ["Run WorkPath.cmd", "Run WorkPath.ps1", "run-workpath.mj
 const packagedRuntime = join(releaseDir, ".workpath-runtime", runtimeName); mkdirSync(packagedRuntime, { recursive: true });
 copyFileSync(join(runtimeDir, "node.exe"), join(packagedRuntime, "node.exe"));
 if (existsSync(join(runtimeDir, "LICENSE"))) copyFileSync(join(runtimeDir, "LICENSE"), join(packagedRuntime, "LICENSE"));
-writeFileSync(join(releaseDir, "portable-release.json"), `${JSON.stringify({ format: 1, nodeVersion, platform: "win32", architecture: "x64", builtAt: new Date().toISOString() }, null, 2)}\n`);
+writeFileSync(join(releaseDir, "portable-release.json"), `${JSON.stringify({ format: 1, appVersion, nodeVersion, platform: "win32", architecture: "x64", builtAt: new Date().toISOString() }, null, 2)}\n`);
 
 console.log("Creating portable release ZIP…");
 const zip = new JSZip(); addTree(zip, releaseDir);
