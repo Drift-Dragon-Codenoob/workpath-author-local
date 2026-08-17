@@ -48,6 +48,7 @@ export async function compileMoodleBook({ project, readAsset }: CompileInput): P
     if (!asset.relativePath.startsWith("assets/originals/")) throw new Error(`Unsafe asset path: ${asset.relativePath}`);
     zip.file(assetPackagePath(asset), await readAsset(asset));
   }
+  zip.file("workpath-source.json", `${JSON.stringify({ format: "workpath-source", version: 1, project }, null, 2)}\n`);
   report.push(`${chapters.length} chapter(s)`, `${topicCount} subchapter(s)`, `${project.assets.length} media file(s)`, ...issues.map((issue) => `Warning: ${issue}`), "Moodle Book import: ready");
   zip.file("workpath-import-report.txt", report.join("\n"));
   return { bytes: await zip.generateAsync({ type: "uint8array", compression: "DEFLATE", compressionOptions: { level: 6 } }), report };

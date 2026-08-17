@@ -6,7 +6,7 @@ This is a new architectural direction, not a desktop wrapper around the previous
 
 ## Run
 
-Requirements: Node.js 24 and npm 11.
+Development requirements: Node.js 24 and npm 11.
 
 ```bash
 npm install
@@ -15,7 +15,7 @@ npm run dev
 
 Open `http://127.0.0.1:4173`. The API runs on `http://127.0.0.1:4174`.
 
-Projects are stored outside the source tree. The project screen can also import original `.workpath.json` and `.uoclearn.json` files. The default storage location is:
+Projects are stored outside the source tree. The project screen can also import Moodle Book `.zip`/`.mbz` packages, whole-book Excel workbooks, and original `.workpath.json`/`.uoclearn.json` files. The default storage location is:
 
 ```text
 ~/WorkPath Projects/
@@ -29,13 +29,13 @@ Override it with `WORKPATH_PROJECTS_DIR`.
 
 The launcher resolves the repository from its own file location, so the folder can be moved or shared without editing paths.
 
-For a pilot handover, send the complete release ZIP rather than copying an existing development folder. The recipient needs Node.js 24 with npm 11, internet access on first launch, and permission to run local PowerShell and npm commands. WorkPath verifies these versions and installs the exact dependency versions recorded in `package-lock.json`. See [PILOT_GUIDE.md](./PILOT_GUIDE.md) for recipient instructions and current packaging limitations.
+For a Windows pilot handover, create and send the complete portable release ZIP with `npm run release:windows`. It includes the Windows Node.js runtime, the compiled application and all runtime dependencies. The recipient does not install Node.js, npm or packages and does not need internet access to launch WorkPath. See [PILOT_GUIDE.md](./PILOT_GUIDE.md).
 
-- On Windows, double-click **Run WorkPath.cmd**. If the folder is under `\\wsl.localhost`, the wrapper delegates to that WSL distribution instead of running Windows npm against Linux files. Native Windows folders use Windows Node normally.
+- On Windows, extract the portable ZIP and double-click **Run WorkPath.cmd**. The launcher prefers the included runtime, including when opened through a `\\wsl.localhost` path.
 - In WSL or Linux, run `./run-workpath.sh`.
 - On any supported environment, run `node run-workpath.mjs` or `npm run launch`.
 
-The launcher requires Node.js. It installs dependencies when `node_modules` is absent, creates a production build, selects an available port from `4174` to `4199`, starts WorkPath and opens it in the appropriate Windows, WSL or Linux browser. Keep the launcher terminal open while using WorkPath; press `Ctrl+C` to stop it.
+Portable Windows releases start the precompiled app directly. Source checkouts retain the developer launcher, which verifies Node/npm, installs missing dependencies and builds before starting. Both choose an available port from `4174` to `4199` and open the browser.
 
 Run the complete verification suite with:
 
@@ -56,7 +56,7 @@ See [DEVELOPERS.md](./DEVELOPERS.md) for the architecture and rebuild roadmap.
 
 ## Current maturity
 
-The repository is a working early rebuild, not yet a complete replacement for the original application. Project storage, revision-safe saving, original JSON migration, top-down block authoring, TinyMCE rich text, image upload, a categorized block library, structured Excel exchange, Moodle preview and Moodle compilation work. Media ZIP migration, external YAML widget packs, autosave and institutional Moodle compatibility testing remain future work.
+The repository is a working early rebuild, not yet a complete replacement for the original application. Project storage, revision-safe autosaving and backups, original JSON migration, top-down block authoring, reusable project block templates, TinyMCE rich text, image upload, structured Excel exchange, Moodle preview and Moodle compilation work. Media ZIP migration, external YAML widget packs and institutional Moodle compatibility testing remain future work.
 
 ## Block library
 
@@ -84,18 +84,26 @@ Existing chapters and subchapters can be exported to Excel or CSV from their pag
 
 Project-local image IDs are intentionally cleared in spreadsheet exports. This prevents an imported workbook from referring to files that do not exist in its new project. After whole-book import, an empty image slot displays its authored alternative text on a white image substitute. If neither an image nor alternative text exists, WorkPath assigns one shared white **Placeholder image** asset. Replace text substitutes and placeholders with the intended images during review. Optional card images remain empty unless an author selects one.
 
-Use **Export Excel Book** in the top banner to save the entire editable book as one `.xlsx` file. Each chapter and subchapter receives its own titled worksheet in book order. Every worksheet uses the same canonical columns as chapter import, and the workbook includes the standard **Instructions** and **Block Types** sheets. Disabled chapters are included because this export represents editable source, while **Export Moodle Book** includes only enabled chapters.
+Use **Export Excel Book** in the top banner to save the entire editable book as one `.xlsx` file. Each chapter and subchapter receives its own titled worksheet in book order. The workbook also includes **Block Templates**, preserving reusable blocks for re-import, plus the standard **Instructions** and **Block Types** sheets. Disabled chapters are included because this export represents editable source, while **Export Moodle Book** includes only enabled chapters.
 
 Use **Import Excel Book** on the project selection screen to create a new local project from a whole-book workbook. WorkPath validates every chapter worksheet before creating anything. Current exports include a **Book Structure** sheet that preserves chapter/subchapter hierarchy, order, enabled state, summaries, project title and unit code. Older multi-sheet workbooks without this metadata can still be imported, with each content sheet treated as a top-level chapter.
 
 WorkPath also accepts the namespace-prefixed `.xlsx` packages produced by the established GPTWork workbook workflow. If normal ExcelJS loading fails, the server repairs that package structure in memory before applying the same strict sheet and content validation. The source file is never modified.
 
+## Moodle ZIP and MBZ import
+
+Use **Import Moodle ZIP / MBZ** on the home screen to recover a Moodle Book chapter-import ZIP or a ZIP/TGZ-based Moodle backup. WorkPath creates a new local project, reconstructs the chapter/subchapter hierarchy, copies packaged assets into the project, and rewrites their links for local preview and later Moodle export.
+
+New WorkPath Moodle exports include a `workpath-source.json` manifest inside the ZIP. Re-importing one restores the exact editable blocks, project templates, theme, unit code and asset identities. The Moodle HTML remains the learner-facing delivery format.
+
+For older ZIP/MBZ files without that manifest, WorkPath recognises its exported `workpath-*` HTML classes and reconstructs the corresponding structured blocks in page order. Ordinary or unrecognised HTML is retained in smaller rich-text blocks between them, rather than flattening the whole page. Imported executable markup is removed. The upload limit is 250 MB compressed and 500 MB after expansion.
+
 ## Authoring workflow
 
 1. Create, open or import a project from the project screen.
 2. Add chapters and optional subchapters from the structure sidebar.
-3. Add and arrange rich text or structured blocks, then use **Save**.
+3. Add and arrange rich text or structured blocks. Use the plus controls between blocks to insert at a specific position, and optionally save useful blocks as project templates.
 4. Use **Preview** to inspect the learner-facing book structure.
 5. Use **Export Excel Book** for a structured whole-book handover or **Export Moodle Book** for the Moodle chapter-import ZIP.
 
-Projects are not currently autosaved. Save before leaving a project or exporting. Revision checks prevent one stale browser session from silently overwriting a newer saved revision.
+Projects autosave locally after editing. **Close project** saves and returns to the home menu so another project can be opened. Preview, project navigation and exports wait for a successful save, while each save retains rolling JSON backups alongside the locally stored assets. The Save button remains available for an immediate save.

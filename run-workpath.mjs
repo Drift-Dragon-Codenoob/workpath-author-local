@@ -11,6 +11,7 @@ const windows = process.platform === "win32";
 const requiredNodeMajor = 24;
 const requiredNpmMajor = 11;
 const installStateFile = join(root, "node_modules", ".workpath-install-state.json");
+const portableManifest = join(root, "portable-release.json");
 
 function run(command, args) {
   const result = spawnSync(command, args, { cwd: root, stdio: "inherit", shell: windows });
@@ -92,6 +93,17 @@ try {
   console.log(`WorkPath folder: ${root}`);
   const nodeVersion = process.version.replace(/^v/, "");
   if (majorVersion(nodeVersion) !== requiredNodeMajor) throw new Error(`WorkPath requires Node.js ${requiredNodeMajor}. Detected Node.js ${nodeVersion}. Install Node.js ${requiredNodeMajor}, then try again.`);
+  if (existsSync(portableManifest)) {
+    const bundle = join(root, "apps", "server", "dist", "server.bundle.mjs");
+    if (!existsSync(bundle)) throw new Error("The portable WorkPath server is missing. Re-extract the complete release ZIP.");
+    const port = await choosePort(); const url = `http://127.0.0.1:${port}`;
+    const child = spawn(process.execPath, [bundle], { cwd: root, env: { ...process.env, HOST: "127.0.0.1", PORT: String(port) }, stdio: "inherit" });
+    const stop = () => { if (child.exitCode === null) child.kill("SIGTERM"); };
+    process.on("SIGINT", stop); process.on("SIGTERM", stop);
+    await waitForApp(url, child); console.log(`WorkPath is ready: ${url}`); if (process.env.WORKPATH_NO_OPEN !== "1") openBrowser(url);
+    const exitCode = await new Promise((resolve) => child.once("exit", (code) => resolve(code ?? 0)));
+    process.exitCode = Number(exitCode);
+  } else {
   const npmVersion = commandVersion(npm);
   if (majorVersion(npmVersion) !== requiredNpmMajor) throw new Error(`WorkPath requires npm ${requiredNpmMajor}. Detected npm ${npmVersion}. Install Node.js ${requiredNodeMajor} with npm ${requiredNpmMajor}, then try again.`);
   const installState = expectedInstallState(nodeVersion, npmVersion);
@@ -108,6 +120,7 @@ try {
   await waitForApp(url, child); console.log(`WorkPath is ready: ${url}`); if (process.env.WORKPATH_NO_OPEN !== "1") openBrowser(url);
   const exitCode = await new Promise((resolve) => child.once("exit", (code) => resolve(code ?? 0)));
   process.exitCode = Number(exitCode);
+  }
 } catch (error) {
   console.error(`\nCould not start WorkPath: ${error instanceof Error ? error.message : error}`);
   process.exitCode = 1;

@@ -23,9 +23,10 @@ The foundation is runnable and verified. It currently provides:
 - A local Node HTTP API.
 - Filesystem-backed project creation, listing, loading and atomic saving.
 - Optimistic revision checks to prevent silent overwrites.
-- A versioned `1.3` project schema with automatic `1.0`–`1.2` migration.
+- A versioned `1.4` project schema with automatic `1.0`–`1.3` migration.
 - A shared Moodle Book compiler.
 - Original `.workpath.json` and `.uoclearn.json` project migration with explicit compatibility warnings.
+- Moodle Book chapter-import ZIP and ZIP/TGZ-based `.mbz` recovery with packaged asset copying, `workpath-*` widget reconstruction and safe rich-text fallback.
 - A block canvas with TinyMCE rich-text editing, ordering, duplication and deletion.
 - A searchable Rise-inspired block library with 21 authoring options grouped by category.
 - Shared definitions and Moodle-safe rendering for content, layout, resource, media, interaction, knowledge-check, data and advanced blocks.
@@ -201,6 +202,8 @@ Build `@workpath/core`, then start:
 
 For the shareable single-server workflow, use `npm run launch`. The launcher builds the application, chooses a free localhost port and opens the browser. Set `WORKPATH_NO_OPEN=1` for automated smoke tests that should not launch a browser.
 
+Create the offline Windows x64 pilot package with `npm run release:windows`. This builds the frontend, bundles the server and runtime JavaScript dependencies into one module, downloads/caches the pinned portable Node.js runtime, and writes `release/WorkPath-Author-Local-portable-win-x64.zip`. The resulting launcher does not use npm or the network on the recipient computer.
+
 ```bash
 npm run typecheck
 ```
@@ -250,11 +253,13 @@ WORKPATH_PROJECTS_DIR=/tmp/workpath-projects npm run dev
     assets/
       originals/
     exports/
+    backups/
+      project-r000012.json
 ```
 
 The project folder ID is generated from the initial title plus a time-derived suffix. Renaming the project does not rename the folder.
 
-`project.json` is written through a sibling temporary file and atomic rename. Media should remain outside JSON.
+`project.json` is written through a sibling temporary file and atomic rename. Each save keeps the previous JSON as one of up to 50 rolling revision backups. Media remains outside JSON under `assets/originals`.
 
 Planned additions:
 
@@ -264,17 +269,15 @@ Planned additions:
       thumbnails/
     exports/
       2026-07-10-book-name.zip
-    backups/
-      project-r00012.json
 ```
 
 ## Project schema
 
-The current local schema is `1.3` and is defined in `packages/core/src/schema.ts`. Schema `1.0`–`1.2` projects are migrated in memory when loaded and written as `1.3` on their next save. Former content topics become chapters; their former topics become optional subchapters. Schema `1.3` adds author-only block metadata for Mapping and suggested-image prompts.
+The current local schema is `1.4` and is defined in `packages/core/src/schema.ts`. Schema `1.0`–`1.3` projects are migrated in memory when loaded and written as `1.4` on their next save. Former content topics become chapters; their former topics become optional subchapters. Schema `1.4` adds project-scoped reusable block templates.
 
 ```ts
 type WorkPathProject = {
-  schemaVersion: "1.3";
+  schemaVersion: "1.4";
   id: string;
   title: string;
   unitCode: string;
@@ -282,6 +285,7 @@ type WorkPathProject = {
   createdAt: string;
   updatedAt: string;
   chapters: Chapter[];
+  blockTemplates: BlockTemplate[];
   assets: AssetRecord[];
   theme: BookTheme;
 };
@@ -533,7 +537,7 @@ These are known, not accidental omissions:
 - Thumbnail generation is not implemented.
 - The API buffers bodies and compiled ZIPs in memory.
 - The web client loads and saves the complete project.
-- Autosave and crash recovery are not implemented.
+- Debounced autosave, save-before-preview/navigation/export and rolling JSON backups are implemented. A dedicated recovery UI is not yet available.
 - Rich-text authoring uses TinyMCE; structured widget editors remain purpose-built React controls.
 - HTML safety checks reject scripts, event handlers and JavaScript URLs, but institutional Moodle sanitisation compatibility still needs fixture-based certification.
 - Image asset references are rewritten and packaged for Moodle; broader media types and media lifecycle operations are not implemented.
@@ -551,9 +555,9 @@ These are known, not accidental omissions:
 ### Milestone 1 — durable local projects
 
 1. Add explicit project close, duplicate, rename, archive and delete operations.
-2. Add autosave with debouncing and visible save state.
+2. Add a user-facing backup recovery browser.
 3. Split topic documents or add topic-level API operations.
-4. Add revision-conflict recovery and backup snapshots.
+4. Add interactive revision-conflict recovery.
 5. Add recovery for interrupted temporary writes.
 
 ### Milestone 2 — asset pipeline

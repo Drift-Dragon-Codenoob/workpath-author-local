@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { WIDGET_DEFINITIONS, createWidgetBlock, renderContentBlock, validateBlock } from "./index.js";
+import { WIDGET_DEFINITIONS, assetPackagePath, createWidgetBlock, renderContentBlock, validateBlock } from "./index.js";
 
 test("creates and renders a widget from the shared registry", () => {
   const block = createWidgetBlock("accordion");
@@ -14,6 +14,12 @@ test("preserves fallback output for a missing widget", () => {
   const block = { id: "missing", type: "widget" as const, widgetKey: "retired-widget", definitionVersion: "1", params: {}, fallbackHtml: "<p>Preserved</p>" };
   assert.equal(renderContentBlock(block), "<p>Preserved</p>");
   assert.match(validateBlock(block)[0]?.message ?? "", /missing/);
+});
+
+test("rewrites imported rich-text asset URLs for Moodle packaging", () => {
+  const asset = { id: crypto.randomUUID(), filename: "diagram.png", mimeType: "image/png", size: 10, relativePath: "assets/originals/diagram.png" };
+  const html = `<p><img src="/api/projects/imported-book/assets/${asset.id}" alt="Diagram"></p>`;
+  assert.equal(renderContentBlock({ id: crypto.randomUUID(), type: "richText", html }, [asset]), `<p><img src="${assetPackagePath(asset)}" alt="Diagram"></p>`);
 });
 
 test("renders accessible table headings and repeatable rows", () => {

@@ -16,6 +16,10 @@ test("compiles chapters and _sub topics for Moodle Book import", async () => {
   assert.match(html, /max-width:980px;padding:50px 60px/);
   assert.match(html, /border-left:4px solid #6f87a5/);
   assert.doesNotMatch(html, /PRIVATE-MAPPING/);
+  const source = JSON.parse(await zip.file("workpath-source.json")!.async("text"));
+  assert.equal(source.format, "workpath-source");
+  assert.equal(source.version, 1);
+  assert.deepEqual(source.project.chapters, project.chapters);
   assert.match(result.report.join(" "), /Moodle Book import: ready/);
 });
 

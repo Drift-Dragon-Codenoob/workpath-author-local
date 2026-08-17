@@ -1,7 +1,8 @@
-import { mkdir, readFile, readdir, rename, rm, writeFile } from "node:fs/promises";
+import { copyFile, mkdir, readFile, readdir, rename, rm, writeFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import path from "node:path";
-import { assertProject, compileMoodleBook, createProject, importLegacyProject, migrateProject, type AssetRecord, type Chapter, type ContentBlock, type Subchapter, type WorkPathProject } from "@workpath/core";
+import { assertProject, compileMoodleBook, createProject, importLegacyProject, migrateProject, type AssetRecord, type BlockTemplate, type Chapter, type ContentBlock, type Subchapter, type WorkPathProject } from "@workpath/core";
+import { parseMoodleArchive } from "./moodleArchive.js";
 
 export const projectsRoot = path.resolve(process.env.WORKPATH_PROJECTS_DIR || path.join(homedir(), "WorkPath Projects"));
 
@@ -54,11 +55,26 @@ export async function importStoredProject(value: unknown) {
   return { id, project, warnings: imported.warnings, sourceSchemaVersion: imported.sourceSchemaVersion };
 }
 
-export async function importStoryboardBook(input: { title: string; unitCode: string; pages: Array<{ worksheet: string; kind: "chapter" | "subchapter"; parentWorksheet?: string; order: number; enabled: boolean; title: string; summary: string; blocks: ContentBlock[] }> }) {
+export async function importMoodlePackage(bytes: Uint8Array, filename: string) {
+  const initialName = filename.replace(/\.(?:zip|mbz)$/i, ""); const id = `${slug(initialName)}-${Date.now().toString(36)}`;
+  const imported = await parseMoodleArchive(bytes, filename, id); const project = createProject(imported.title);
+  project.chapters = imported.chapters; project.assets = imported.assets.map(({ bytes: _bytes, ...asset }) => asset);
+  if (imported.unitCode !== undefined) project.unitCode = imported.unitCode;
+  if (imported.blockTemplates) project.blockTemplates = imported.blockTemplates;
+  if (imported.theme) project.theme = imported.theme;
+  try {
+    await mkdir(path.join(projectDir(id), "assets", "originals"), { recursive: true }); await mkdir(path.join(projectDir(id), "exports"), { recursive: true });
+    for (const asset of imported.assets) await writeFile(path.join(projectDir(id), asset.relativePath), asset.bytes);
+    return { id, project: await saveProject(id, project, false), warnings: imported.warnings };
+  } catch (error) { await rm(projectDir(id), { recursive: true, force: true }); throw error; }
+}
+
+export async function importStoryboardBook(input: { title: string; unitCode: string; pages: Array<{ worksheet: string; kind: "chapter" | "subchapter"; parentWorksheet?: string; order: number; enabled: boolean; title: string; summary: string; blocks: ContentBlock[] }>; templates?: BlockTemplate[] }) {
   const id = `${slug(input.title)}-${Date.now().toString(36)}`;
   const project = createProject(input.title.trim() || "Imported Excel Book");
   const chapterPages = input.pages.filter((page) => page.kind === "chapter").sort((a, b) => a.order - b.order);
   project.unitCode = input.unitCode;
+  project.blockTemplates = input.templates ?? [];
   project.chapters = chapterPages.map((page, chapterIndex): Chapter => ({
     id: crypto.randomUUID(), title: page.title, summary: page.summary, order: chapterIndex + 1, enabled: page.enabled, blocks: page.blocks,
     subchapters: input.pages.filter((entry) => entry.kind === "subchapter" && entry.parentWorksheet === page.worksheet).sort((a, b) => a.order - b.order).map((entry, subchapterIndex): Subchapter => ({ id: crypto.randomUUID(), title: entry.title, summary: entry.summary, order: subchapterIndex + 1, blocks: entry.blocks })),
@@ -109,6 +125,12 @@ export async function saveProject(id: string, project: WorkPathProject, incremen
   const next = { ...project, revision: increment ? project.revision + 1 : project.revision, updatedAt: new Date().toISOString() };
   const target = projectFile(id);
   const temporary = `${target}.tmp`;
+  if (existing) {
+    const backupDir = path.join(projectDir(id), "backups"); await mkdir(backupDir, { recursive: true });
+    await copyFile(target, path.join(backupDir, `project-r${String(existing.revision).padStart(6, "0")}.json`));
+    const backups = (await readdir(backupDir)).filter((name) => /^project-r\d+\.json$/.test(name)).sort();
+    for (const expired of backups.slice(0, Math.max(0, backups.length - 50))) await rm(path.join(backupDir, expired));
+  }
   await writeFile(temporary, `${JSON.stringify(next, null, 2)}\n`, "utf8");
   await rename(temporary, target);
   return next;

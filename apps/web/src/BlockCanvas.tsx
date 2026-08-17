@@ -1,51 +1,53 @@
 import { lazy, Suspense, useEffect, useState } from "react";
-import { WIDGET_DEFINITIONS, createWidgetBlock, findWidgetDefinition, renderContentBlock, validateBlock, type AssetRecord, type ContentBlock, type RichTextBlock, type WidgetBlock, type WidgetParameter } from "@workpath/core";
-import { BookOpen, Boxes, Braces, CheckCircle2, FileText, Grid2X2, Image, LayoutGrid, Library, List, Search, Sparkles, X } from "lucide-react";
+import { WIDGET_DEFINITIONS, createWidgetBlock, findWidgetDefinition, renderContentBlock, validateBlock, type AssetRecord, type BlockTemplate, type ContentBlock, type RichTextBlock, type WidgetBlock, type WidgetParameter } from "@workpath/core";
+import { BookOpen, Boxes, Braces, CheckCircle2, FileText, Grid2X2, Image, LayoutGrid, Library, List, Save, Search, Sparkles, X } from "lucide-react";
 
 const RichTextEditor = lazy(() => import("./RichTextEditor").then((module) => ({ default: module.RichTextEditor })));
 const EditorLoading = () => <div className="editor-loading">Loading rich-text editor…</div>;
 
 const makeRichText = (): RichTextBlock => ({ id: crypto.randomUUID(), type: "richText", html: "<p>Start writing here.</p>" });
 
-export function BlockCanvas({ blocks, assets, assetUrl, onChange, onUpload }: { blocks: ContentBlock[]; assets: AssetRecord[]; assetUrl: (asset: AssetRecord) => string; onChange: (blocks: ContentBlock[]) => void; onUpload: (blockId: string, parameterName: string, file: File) => Promise<void> }) {
+export function BlockCanvas({ blocks, templates, assets, assetUrl, onChange, onUpload, onSaveTemplate, onDeleteTemplate }: { blocks: ContentBlock[]; templates: BlockTemplate[]; assets: AssetRecord[]; assetUrl: (asset: AssetRecord) => string; onChange: (blocks: ContentBlock[]) => void; onUpload: (blockId: string, parameterName: string, file: File) => Promise<void>; onSaveTemplate: (block: ContentBlock) => void; onDeleteTemplate: (template: BlockTemplate) => void }) {
   const [activeId, setActiveId] = useState(blocks[0]?.id ?? "");
-  const [pickerOpen, setPickerOpen] = useState(false);
+  const [insertAt, setInsertAt] = useState<number | null>(null);
   useEffect(() => { if (activeId && !blocks.some((block) => block.id === activeId)) setActiveId(blocks[0]?.id ?? ""); }, [activeId, blocks]);
   const update = (id: string, block: ContentBlock) => onChange(blocks.map((entry) => entry.id === id ? block : entry));
-  const add = (block: ContentBlock) => { onChange([...blocks, block]); setActiveId(block.id); setPickerOpen(false); };
+  const openPicker = (index: number) => setInsertAt(index);
+  const add = (source: ContentBlock) => { const block = structuredClone(source); block.id = crypto.randomUUID(); const next = [...blocks]; next.splice(insertAt ?? blocks.length, 0, block); onChange(next); setActiveId(block.id); setInsertAt(null); };
   const move = (index: number, direction: -1 | 1) => { const target = index + direction; if (target < 0 || target >= blocks.length) return; const next = [...blocks]; [next[index], next[target]] = [next[target]!, next[index]!]; onChange(next); };
   const duplicate = (index: number) => { const copy = structuredClone(blocks[index]!); copy.id = crypto.randomUUID(); const next = [...blocks]; next.splice(index + 1, 0, copy); onChange(next); setActiveId(copy.id); };
   const remove = (index: number) => { if (!window.confirm("Delete this block?")) return; onChange(blocks.filter((_, position) => position !== index)); };
 
   return <section className="block-builder" aria-label="Topic blocks">
     <div className="block-builder-heading"><div><span className="eyebrow">Build</span><h2>Content blocks</h2></div></div>
-    {!blocks.length && !pickerOpen && <button className="start-block-button" onClick={() => setPickerOpen(true)}><strong>Add a block to start</strong><span>Choose text, media, an interaction, or a table</span></button>}
+    {!blocks.length && insertAt === null && <button className="start-block-button" onClick={() => openPicker(0)}><strong>Add a block to start</strong><span>Choose text, media, an interaction, a saved template, or a table</span></button>}
     <div className="block-list">{blocks.map((block, index) => {
       const active = activeId === block.id;
       const label = block.type === "richText" ? "Rich text" : findWidgetDefinition(block.widgetKey)?.name ?? block.widgetKey;
       const issues = validateBlock(block);
-      return <article className={`block-card${active ? " active" : ""}`} key={block.id} onClick={() => setActiveId(block.id)}>
-        <header><div><span className="block-number">{index + 1}</span><strong>{label}</strong></div><div className="block-actions"><button title="Move up" disabled={index === 0} onClick={(event) => { event.stopPropagation(); move(index, -1); }}>↑</button><button title="Move down" disabled={index === blocks.length - 1} onClick={(event) => { event.stopPropagation(); move(index, 1); }}>↓</button><button title="Duplicate" onClick={(event) => { event.stopPropagation(); duplicate(index); }}>Duplicate</button><button className="danger" title="Delete" onClick={(event) => { event.stopPropagation(); remove(index); }}>Delete</button></div></header>
+      return <div className="block-and-insert" key={block.id}><article className={`block-card${active ? " active" : ""}`} onClick={() => setActiveId(block.id)}>
+        <header><div><span className="block-number">{index + 1}</span><strong>{label}</strong></div><div className="block-actions"><button title="Move up" disabled={index === 0} onClick={(event) => { event.stopPropagation(); move(index, -1); }}>↑</button><button title="Move down" disabled={index === blocks.length - 1} onClick={(event) => { event.stopPropagation(); move(index, 1); }}>↓</button><button title="Save as project template" onClick={(event) => { event.stopPropagation(); onSaveTemplate(block); }}>Save template</button><button title="Duplicate" onClick={(event) => { event.stopPropagation(); duplicate(index); }}>Duplicate</button><button className="danger" title="Delete" onClick={(event) => { event.stopPropagation(); remove(index); }}>Delete</button></div></header>
         {issues.length > 0 && <ul className="validation-list">{issues.map((issue) => <li key={issue.message}>{issue.message}</li>)}</ul>}
         {active ? <>{block.type === "richText" ? <Suspense fallback={<EditorLoading />}><RichTextEditor id={block.id} value={block.html} onChange={(html) => update(block.id, { ...block, html })} /></Suspense> : <WidgetEditor block={block} assets={assets} assetUrl={assetUrl} onUpload={onUpload} onChange={(next) => update(block.id, next)} />}<BlockMetadataFields block={block} onChange={(next) => update(block.id, next)} /></> : <div className="block-summary" dangerouslySetInnerHTML={{ __html: renderContentBlock(block, assets, assetUrl) }} />}
-      </article>;
+      </article>{index < blocks.length - 1 && <button className="insert-block-button" title={`Add a block between blocks ${index + 1} and ${index + 2}`} aria-label={`Add a block between blocks ${index + 1} and ${index + 2}`} onClick={() => openPicker(index + 1)}>+</button>}</div>;
     })}</div>
-    {pickerOpen && <BlockLibrary onClose={() => setPickerOpen(false)} onAdd={add} />}
-    {blocks.length > 0 && <button className="append-block-button" onClick={() => setPickerOpen((open) => !open)}>{pickerOpen ? "Close block library" : "+ Add block"}</button>}
+    {insertAt !== null && <BlockLibrary templates={templates} onDeleteTemplate={onDeleteTemplate} onClose={() => setInsertAt(null)} onAdd={add} />}
+    {blocks.length > 0 && <button className="append-block-button" onClick={() => insertAt === blocks.length ? setInsertAt(null) : openPicker(blocks.length)}>{insertAt === blocks.length ? "Close block library" : "+ Add block"}</button>}
   </section>;
 }
 
-const categoryIcons = { All: Library, Text: FileText, Content: List, Layout: LayoutGrid, Media: Image, Interactive: Sparkles, "Knowledge check": CheckCircle2, Resources: BookOpen, Data: Grid2X2, Advanced: Braces } as const;
+const categoryIcons = { All: Library, Saved: Save, Text: FileText, Content: List, Layout: LayoutGrid, Media: Image, Interactive: Sparkles, "Knowledge check": CheckCircle2, Resources: BookOpen, Data: Grid2X2, Advanced: Braces } as const;
 
-function BlockLibrary({ onClose, onAdd }: { onClose: () => void; onAdd: (block: ContentBlock) => void }) {
+function BlockLibrary({ templates, onDeleteTemplate, onClose, onAdd }: { templates: BlockTemplate[]; onDeleteTemplate: (template: BlockTemplate) => void; onClose: () => void; onAdd: (block: ContentBlock) => void }) {
   const [category, setCategory] = useState<keyof typeof categoryIcons>("All");
   const [query, setQuery] = useState("");
   const categories = Object.keys(categoryIcons) as Array<keyof typeof categoryIcons>;
-  const definitions = WIDGET_DEFINITIONS.filter((definition) => (category === "All" || definition.category === category) && `${definition.name} ${definition.description} ${definition.category}`.toLowerCase().includes(query.trim().toLowerCase()));
+  const definitions = WIDGET_DEFINITIONS.filter((definition) => category !== "Saved" && (category === "All" || definition.category === category) && `${definition.name} ${definition.description} ${definition.category}`.toLowerCase().includes(query.trim().toLowerCase()));
+  const matchingTemplates = templates.filter((template) => (category === "All" || category === "Saved") && template.name.toLocaleLowerCase().includes(query.trim().toLocaleLowerCase()));
   const showText = (category === "All" || category === "Text") && "rich text formatted tinymce".includes(query.trim().toLowerCase());
   return <div className="block-library-backdrop" role="presentation" onMouseDown={onClose}><section className="block-library" role="dialog" aria-modal="true" aria-labelledby="block-library-title" onMouseDown={(event) => event.stopPropagation()}>
     <aside><header><strong id="block-library-title">Block library</strong><button className="icon-button" aria-label="Close block library" onClick={onClose}><X aria-hidden="true" /></button></header><nav aria-label="Block categories">{categories.map((item) => { const Icon = categoryIcons[item]; return <button className={category === item ? "active" : ""} key={item} onClick={() => setCategory(item)}><Icon aria-hidden="true" />{item}</button>; })}</nav></aside>
-    <main><label className="block-search"><Search aria-hidden="true" /><input autoFocus value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search blocks" /></label><div className="library-heading"><div><span className="eyebrow">{category}</span><h3>{category === "All" ? "All blocks" : `${category} blocks`}</h3></div><span>{definitions.length + (showText ? 1 : 0)} options</span></div><div className="library-grid">{showText && <button onClick={() => onAdd(makeRichText())}><FileText aria-hidden="true" /><span><strong>Rich text</strong><small>Formatted text using TinyMCE.</small></span></button>}{definitions.map((definition) => { const Icon = categoryIcons[definition.category as keyof typeof categoryIcons] ?? Boxes; return <button key={definition.key} onClick={() => onAdd(createWidgetBlock(definition.key))}><Icon aria-hidden="true" /><span><strong>{definition.name}</strong><small>{definition.description}</small><em>{definition.category}</em></span></button>; })}{definitions.length === 0 && !showText && <p className="library-empty">No blocks match this search.</p>}</div></main>
+    <main><label className="block-search"><Search aria-hidden="true" /><input autoFocus value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search blocks and saved templates" /></label><div className="library-heading"><div><span className="eyebrow">{category}</span><h3>{category === "All" ? "All blocks" : category === "Saved" ? "Saved templates" : `${category} blocks`}</h3></div><span>{definitions.length + matchingTemplates.length + (showText ? 1 : 0)} options</span></div><div className="library-grid">{matchingTemplates.map((template) => <article className="template-library-card" key={template.id}><button onClick={() => onAdd(template.block)}><Save aria-hidden="true" /><span><strong>{template.name}</strong><small>Reusable block saved in this project.</small><em>Saved template</em></span></button><button className="template-remove" onClick={() => onDeleteTemplate(template)}>Remove</button></article>)}{showText && <button onClick={() => onAdd(makeRichText())}><FileText aria-hidden="true" /><span><strong>Rich text</strong><small>Formatted text using TinyMCE.</small></span></button>}{definitions.map((definition) => { const Icon = categoryIcons[definition.category as keyof typeof categoryIcons] ?? Boxes; return <button key={definition.key} onClick={() => onAdd(createWidgetBlock(definition.key))}><Icon aria-hidden="true" /><span><strong>{definition.name}</strong><small>{definition.description}</small><em>{definition.category}</em></span></button>; })}{definitions.length === 0 && matchingTemplates.length === 0 && !showText && <p className="library-empty">No blocks match this search.</p>}</div></main>
   </section></div>;
 }
 

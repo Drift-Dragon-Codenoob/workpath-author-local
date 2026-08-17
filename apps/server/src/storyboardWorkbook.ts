@@ -1,9 +1,9 @@
 import ExcelJS from "exceljs";
 import JSZip from "jszip";
-import { STORYBOARD_BLOCK_TYPES, WIDGET_DEFINITIONS, storyboardRowFromBlock, verifyStoryboardRows, type Chapter, type StoryboardRowInput, type StoryboardVerification, type Subchapter, type WorkPathProject } from "@workpath/core";
+import { STORYBOARD_BLOCK_TYPES, WIDGET_DEFINITIONS, storyboardRowFromBlock, verifyStoryboardRows, type BlockTemplate, type Chapter, type StoryboardRowInput, type StoryboardVerification, type Subchapter, type WorkPathProject } from "@workpath/core";
 
 export type BookStoryboardPage = { worksheet: string; kind: "chapter" | "subchapter"; parentWorksheet?: string; order: number; enabled: boolean; title: string; summary: string; blocks: Chapter["blocks"] };
-export type BookStoryboardVerification = { title: string; unitCode: string; pages: BookStoryboardPage[]; errors: string[]; valid: boolean };
+export type BookStoryboardVerification = { title: string; unitCode: string; pages: BookStoryboardPage[]; templates: BlockTemplate[]; errors: string[]; valid: boolean };
 
 const headers = ["Topic", "Block order", "Block type", "Content", "Mapping", "Settings JSON", "Validation notes"];
 const guidance: Record<string, string> = {
@@ -59,8 +59,9 @@ function storyboardRows(sheet: ExcelJS.Worksheet) {
 export async function parseBookStoryboard(bytes: Uint8Array): Promise<BookStoryboardVerification> {
   const workbook = await loadWorkbook(bytes);
   const structure = workbook.getWorksheet("Book Structure");
-  const reserved = new Set(["book structure", "instructions", "block types"]);
-  const errors: string[] = []; const pages: BookStoryboardPage[] = [];
+  const templateSheet = workbook.getWorksheet("Block Templates");
+  const reserved = new Set(["book structure", "block templates", "instructions", "block types"]);
+  const errors: string[] = []; const pages: BookStoryboardPage[] = []; const templates: BlockTemplate[] = [];
   let title = "Imported Excel Book"; let unitCode = "";
   const metadata = new Map<string, { kind: "chapter" | "subchapter"; parentWorksheet?: string; order: number; enabled: boolean; title: string; summary: string }>();
   if (structure) {
@@ -89,7 +90,30 @@ export async function parseBookStoryboard(bytes: Uint8Array): Promise<BookStoryb
   });
   if (structure) for (const worksheet of metadata.keys()) if (!workbook.getWorksheet(worksheet)) errors.push(`Book Structure references missing worksheet: ${worksheet}.`);
   for (const page of pages.filter((entry) => entry.kind === "subchapter")) if (!page.parentWorksheet || !pages.some((entry) => entry.kind === "chapter" && entry.worksheet === page.parentWorksheet)) errors.push(`${page.worksheet} does not reference a valid parent chapter worksheet.`);
-  return { title, unitCode, pages, errors, valid: errors.length === 0 };
+  if (templateSheet) parseBlockTemplates(templateSheet, templates, errors);
+  return { title, unitCode, pages, templates, errors, valid: errors.length === 0 };
+}
+
+function parseBlockTemplates(sheet: ExcelJS.Worksheet, templates: BlockTemplate[], errors: string[]) {
+  const expected = ["Template name", "Block type", "Content", "Mapping", "Settings JSON"];
+  const columns = new Map<string, number>(); sheet.getRow(1).eachCell((cell, column) => columns.set(cellText(cell).trim().toLowerCase(), column));
+  for (const header of expected) if (!columns.has(header.toLowerCase())) errors.push(`Block Templates is missing required column: ${header}.`);
+  if (errors.some((error) => error.startsWith("Block Templates is missing"))) return;
+  const seen = new Set<string>();
+  sheet.eachRow((row, rowNumber) => {
+    if (rowNumber === 1) return;
+    const get = (header: string) => cellText(row.getCell(columns.get(header.toLowerCase())!)).trim();
+    const name = get("Template name"); if (!name && !expected.slice(1).some((header) => get(header))) return;
+    if (!name) { errors.push(`Block Templates row ${rowNumber}: Template name is required.`); return; }
+    if (seen.has(name.toLocaleLowerCase())) { errors.push(`Block Templates row ${rowNumber}: Template name “${name}” is duplicated.`); return; }
+    seen.add(name.toLocaleLowerCase());
+    const verification = verifyStoryboardRows([{ topic: name, order: 1, blockType: get("Block type"), content: get("Content"), mapping: get("Mapping"), settingsJson: get("Settings JSON") }]);
+    const portableImageIssues = new Set(["Choose an image.", "Choose a hotspot image.", "Choose an image for every gallery item.", "Choose an image for every flip card."]);
+    const blockingMessages = verification.messages.filter((message) => message.severity === "error" && !portableImageIssues.has(message.message));
+    blockingMessages.forEach((message) => errors.push(`Block Templates row ${rowNumber}: ${message.message}`));
+    const block = verification.rows[0]?.block; if (!block || blockingMessages.length) return;
+    const now = new Date().toISOString(); templates.push({ id: crypto.randomUUID(), name, block, createdAt: now, updatedAt: now });
+  });
 }
 
 async function loadWorkbook(bytes: Uint8Array) {
@@ -139,7 +163,7 @@ export async function exportStoryboard(page: Chapter | Subchapter) {
 
 export async function exportBookStoryboard(project: WorkPathProject) {
   const workbook = new ExcelJS.Workbook(); workbook.creator = "WorkPath Author Local"; workbook.created = new Date();
-  const usedNames = new Set<string>(["book structure", "instructions", "block types"]);
+  const usedNames = new Set<string>(["book structure", "block templates", "instructions", "block types"]);
   const structureRows: Array<[string, string, string, string, string, number, boolean, string, string]> = [];
   const chapters = [...project.chapters].sort((a, b) => a.order - b.order);
   for (const chapter of chapters) {
@@ -154,8 +178,18 @@ export async function exportBookStoryboard(project: WorkPathProject) {
   }
   if (!workbook.worksheets.length) addStoryboardSheet(workbook, "Storyboard", [], "");
   addBookStructureSheet(workbook, structureRows);
+  addBlockTemplatesSheet(workbook, project.blockTemplates);
   addReferenceSheets(workbook, "Each titled Storyboard sheet represents one chapter or subchapter in this book.");
   return new Uint8Array(await workbook.xlsx.writeBuffer());
+}
+
+function addBlockTemplatesSheet(workbook: ExcelJS.Workbook, templates: BlockTemplate[]) {
+  const sheet = workbook.addWorksheet("Block Templates", { views: [{ state: "frozen", ySplit: 1 }] });
+  sheet.columns = [{ width: 34 }, { width: 24 }, { width: 80 }, { width: 28 }, { width: 55 }];
+  const header = sheet.addRow(["Template name", "Block type", "Content", "Mapping", "Settings JSON"]);
+  header.font = { bold: true, color: { argb: "FFFFFFFF" } }; header.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FF17365D" } };
+  templates.forEach((template) => { const row = storyboardRowFromBlock(template.name, template.block, 1); sheet.addRow([template.name, row.blockType, row.content, row.mapping, row.settingsJson]); });
+  sheet.eachRow((row) => { row.alignment = { vertical: "top", wrapText: true }; }); sheet.autoFilter = { from: "A1", to: "E1" };
 }
 
 function addBookStructureSheet(workbook: ExcelJS.Workbook, rows: Array<[string, string, string, string, string, number, boolean, string, string]>) {
@@ -189,7 +223,7 @@ function addStoryboardSheet(workbook: ExcelJS.Workbook, name: string, rows: Stor
 }
 
 function addReferenceSheets(workbook: ExcelJS.Workbook, description: string) {
-  const instructions = workbook.addWorksheet("Instructions"); instructions.columns = [{ width: 28 }, { width: 105 }]; instructions.addRow(["WorkPath storyboard", description]); instructions.addRow(["Topic", "Enter the chapter or subchapter title in the first content row. Blank Topic cells underneath inherit that title."]); instructions.addRow(["Block order", "Use unique positive whole numbers. WorkPath sorts rows by this value."]); instructions.addRow(["Block type", "Choose one of the 21 exact names from the dropdown. See Block Types for categories and authoring guidance."]); instructions.addRow(["Content", "The original eight storyboard types support documented Markdown. New structured blocks are preserved through Settings JSON."]); instructions.addRow(["Mapping", "Optional author-only curriculum or requirement mapping. It never appears in preview or Moodle export."]); instructions.addRow(["Settings JSON", "Authoritative structured block data used for lossless export and re-import. Do not rename its properties manually unless you understand the block schema."]); instructions.addRow(["Images", "Image IDs are removed during export. Without an image, WorkPath visibly displays the authored alternative text; if that is also blank, whole-book import assigns a shared Placeholder image. Replace fallbacks during review."]); instructions.addRow(["Custom HTML", "Scripts, iframes, event handlers and JavaScript URLs are rejected. Use Video embed for approved video providers."]); instructions.addRow(["Whole books", "Export Excel Book adds one content sheet per page plus Book Structure, which preserves hierarchy, summaries, ordering and enabled state."]); instructions.getRow(1).font = { bold: true, size: 15 }; instructions.eachRow((row) => { row.alignment = { vertical: "top", wrapText: true }; });
+  const instructions = workbook.addWorksheet("Instructions"); instructions.columns = [{ width: 28 }, { width: 105 }]; instructions.addRow(["WorkPath storyboard", description]); instructions.addRow(["Topic", "Enter the chapter or subchapter title in the first content row. Blank Topic cells underneath inherit that title."]); instructions.addRow(["Block order", "Use unique positive whole numbers. WorkPath sorts rows by this value."]); instructions.addRow(["Block type", "Choose one of the 21 exact names from the dropdown. See Block Types for categories and authoring guidance."]); instructions.addRow(["Content", "The original eight storyboard types support documented Markdown. New structured blocks are preserved through Settings JSON."]); instructions.addRow(["Mapping", "Optional author-only curriculum or requirement mapping. It never appears in preview or Moodle export."]); instructions.addRow(["Settings JSON", "Authoritative structured block data used for lossless export and re-import. Do not rename its properties manually unless you understand the block schema."]); instructions.addRow(["Images", "Image IDs are removed during export. Without an image, WorkPath visibly displays the authored alternative text; if that is also blank, whole-book import assigns a shared Placeholder image. Replace fallbacks during review."]); instructions.addRow(["Custom HTML", "Scripts, iframes, event handlers and JavaScript URLs are rejected. Use Video embed for approved video providers."]); instructions.addRow(["Whole books", "Export Excel Book adds one content sheet per page plus Book Structure, which preserves hierarchy, summaries, ordering and enabled state."]); instructions.addRow(["Block templates", "Whole-book exports include project-scoped reusable blocks on Block Templates. Importing that workbook recreates the template library."]); instructions.getRow(1).font = { bold: true, size: 15 }; instructions.eachRow((row) => { row.alignment = { vertical: "top", wrapText: true }; });
   const types = workbook.addWorksheet("Block Types"); types.columns = [{ width: 34 }, { width: 22 }, { width: 100 }]; types.addRow(["Block type", "Category", "Required Content format or guidance"]); STORYBOARD_BLOCK_TYPES.forEach((type) => types.addRow([type, blockCategories.get(type) ?? "Other", guidance[type]])); types.getRow(1).font = { bold: true, color: { argb: "FFFFFFFF" } }; types.getRow(1).fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FF17365D" } }; types.autoFilter = { from: "A1", to: "C1" }; types.views = [{ state: "frozen", ySplit: 1 }]; types.eachRow((row) => { row.alignment = { vertical: "top", wrapText: true }; });
 }
 

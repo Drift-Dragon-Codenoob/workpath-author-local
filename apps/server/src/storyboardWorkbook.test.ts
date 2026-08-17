@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import ExcelJS from "exceljs";
 import JSZip from "jszip";
-import { createProject } from "@workpath/core";
+import { createProject, createWidgetBlock } from "@workpath/core";
 import { createStoryboardTemplate, exportBookStoryboard, exportStoryboard, exportStoryboardCsv, parseBookStoryboard, parseStoryboardFile } from "./storyboardWorkbook.js";
 
 test("generates and parses the validated Excel template", async () => {
@@ -31,16 +31,23 @@ test("round-trips a chapter through XLSX and multiline CSV", async () => {
 
 test("exports a full book with one structured sheet per chapter and subchapter", async () => {
   const project = createProject("Workbook");
+  project.blockTemplates.push({ id: crypto.randomUUID(), name: "Reusable introduction", block: { id: crypto.randomUUID(), type: "richText", html: "<p>Template content</p>" }, createdAt: "2026-01-01T00:00:00.000Z", updatedAt: "2026-01-01T00:00:00.000Z" });
+  const imageTemplate = createWidgetBlock("image"); imageTemplate.params.imageAssetId = "project-local-image"; imageTemplate.params.altText = "A reusable example image";
+  project.blockTemplates.push({ id: crypto.randomUUID(), name: "Reusable image", block: imageTemplate, createdAt: "2026-01-01T00:00:00.000Z", updatedAt: "2026-01-01T00:00:00.000Z" });
   project.chapters[0]!.title = "Repeated title";
   project.chapters[0]!.subchapters.push({ id: crypto.randomUUID(), title: "Repeated title", summary: "", order: 1, blocks: [{ id: crypto.randomUUID(), type: "richText", html: "<p>Subchapter</p>" }] });
   project.chapters.push({ id: crypto.randomUUID(), title: "A title longer than thirty-one characters for Excel", summary: "", order: 2, enabled: false, blocks: [{ id: crypto.randomUUID(), type: "richText", html: "<p>Disabled source</p>" }], subchapters: [] });
   const workbook = new ExcelJS.Workbook(); await workbook.xlsx.load(await exportBookStoryboard(project) as unknown as ExcelJS.Buffer);
-  assert.deepEqual(workbook.worksheets.map((sheet) => sheet.name), ["Repeated title", "Repeated title (2)", "A title longer than thirty-one", "Book Structure", "Instructions", "Block Types"]);
+  assert.deepEqual(workbook.worksheets.map((sheet) => sheet.name), ["Repeated title", "Repeated title (2)", "A title longer than thirty-one", "Book Structure", "Block Templates", "Instructions", "Block Types"]);
   for (const sheet of workbook.worksheets.slice(0, 3)) assert.deepEqual(Array.from({ length: 7 }, (_, index) => sheet.getRow(1).getCell(index + 1).text), ["Topic", "Block order", "Block type", "Content", "Mapping", "Settings JSON", "Validation notes"]);
   const verification = await parseBookStoryboard(await exportBookStoryboard(project));
   assert.equal(verification.valid, true); assert.equal(verification.title, "Workbook"); assert.equal(verification.pages.length, 3);
   assert.equal(verification.pages[1]?.kind, "subchapter"); assert.equal(verification.pages[1]?.parentWorksheet, "Repeated title");
   assert.equal(verification.pages[2]?.enabled, false);
+  assert.equal(verification.templates.length, 2); assert.equal(verification.templates[0]?.name, "Reusable introduction");
+  assert.equal(verification.templates[0]?.block.type, "richText");
+  const importedImage = verification.templates[1]?.block; assert.equal(importedImage?.type, "widget");
+  if (importedImage?.type === "widget") assert.equal(importedImage.params.imageAssetId, "");
 });
 
 test("normalises namespaced workflow workbooks before validation", async () => {

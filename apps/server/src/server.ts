@@ -4,7 +4,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import type { WorkPathProject } from "@workpath/core";
 import { verifyStoryboardRows, type StoryboardRowInput } from "@workpath/core";
-import { addProjectImage, createStoredProject, deleteStoredProject, exportProject, getProjectPage, importStoredProject, importStoryboardBook, importStoryboardPage, initialiseStore, listProjects, loadProject, readProjectAsset, saveProject } from "./store.js";
+import { addProjectImage, createStoredProject, deleteStoredProject, exportProject, getProjectPage, importMoodlePackage, importStoredProject, importStoryboardBook, importStoryboardPage, initialiseStore, listProjects, loadProject, readProjectAsset, saveProject } from "./store.js";
 import { createStoryboardTemplate, exportBookStoryboard, exportStoryboard, exportStoryboardCsv, parseBookStoryboard, parseStoryboardFile } from "./storyboardWorkbook.js";
 
 const host = process.env.HOST || "127.0.0.1";
@@ -28,12 +28,12 @@ async function body(request: IncomingMessage) {
   return JSON.parse(Buffer.concat(chunks).toString("utf8") || "{}");
 }
 
-async function binaryBody(request: IncomingMessage) {
+async function binaryBody(request: IncomingMessage, maximumBytes = 20 * 1024 * 1024) {
   const chunks: Buffer[] = [];
   let size = 0;
   for await (const chunk of request) {
     const buffer = Buffer.from(chunk); size += buffer.length;
-    if (size > 20 * 1024 * 1024) throw new Error("Uploaded file is too large (20 MB maximum).");
+    if (size > maximumBytes) throw new Error(`Uploaded file is too large (${Math.round(maximumBytes / 1024 / 1024)} MB maximum).`);
     chunks.push(buffer);
   }
   return new Uint8Array(Buffer.concat(chunks));
@@ -57,6 +57,11 @@ async function api(request: IncomingMessage, response: ServerResponse, url: URL)
     const verification = await parseBookStoryboard(await binaryBody(request));
     if (!verification.valid) return json(response, 400, { error: "Book workbook has validation errors.", verification });
     return json(response, 201, { ...await importStoryboardBook(verification), verification });
+  }
+  if (url.pathname === "/api/import/moodle-package" && request.method === "POST") {
+    const filename = decodeURIComponent(String(request.headers["x-filename"] || "moodle-book.zip"));
+    if (!/\.(?:zip|mbz)$/i.test(filename)) throw new Error("Choose a .zip or .mbz Moodle package.");
+    return json(response, 201, await importMoodlePackage(await binaryBody(request, 250 * 1024 * 1024), filename));
   }
   const bookStoryboardExport = url.pathname.match(/^\/api\/projects\/([a-z0-9-]+)\/storyboard\.xlsx$/);
   if (bookStoryboardExport?.[1] && request.method === "GET") {

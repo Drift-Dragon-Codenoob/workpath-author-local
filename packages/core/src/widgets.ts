@@ -171,7 +171,10 @@ export function renderWidgetBlock(block: WidgetBlock, assets: AssetRecord[] = []
 }
 
 export function renderContentBlock(block: ContentBlock, assets: AssetRecord[] = [], assetUrl: (asset: AssetRecord) => string = assetPackagePath): string {
-  return block.type === "richText" ? block.html : renderWidgetBlock(block, assets, assetUrl);
+  if (block.type !== "richText") return renderWidgetBlock(block, assets, assetUrl);
+  return block.html.replace(/\/api\/projects\/[a-z0-9-]+\/assets\/([a-f0-9-]{36})/gi, (original, assetId: string) => {
+    const asset = assets.find((item) => item.id === assetId); return asset ? assetUrl(asset) : original;
+  });
 }
 
 export function validateBlock(block: ContentBlock): ValidationIssue[] {

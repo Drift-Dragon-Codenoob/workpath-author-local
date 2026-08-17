@@ -1,9 +1,9 @@
 import assert from "node:assert/strict";
-import { access } from "node:fs/promises";
+import { access, readdir } from "node:fs/promises";
 import path from "node:path";
 import test from "node:test";
 import { createProject, createWidgetBlock } from "@workpath/core";
-import { applyImportedImagePlaceholders, createStoredProject, deleteStoredProject, projectsRoot } from "./store.js";
+import { applyImportedImagePlaceholders, createStoredProject, deleteStoredProject, projectsRoot, saveProject } from "./store.js";
 
 test("assigns one shared placeholder to required imported image slots", () => {
   const project = createProject("Placeholder test");
@@ -42,4 +42,13 @@ test("deletes a stored project and its complete project folder", async () => {
   const deleted = await deleteStoredProject(created.id);
   assert.equal(deleted.id, created.id);
   await assert.rejects(access(projectFolder));
+});
+
+test("keeps a local backup of the previous project revision when saving", async () => {
+  const created = await createStoredProject(`Backup test ${crypto.randomUUID()}`);
+  try {
+    const saved = await saveProject(created.id, { ...created.project, title: "Saved title" });
+    assert.equal(saved.revision, created.project.revision + 1);
+    assert.deepEqual(await readdir(path.join(projectsRoot, created.id, "backups")), [`project-r${String(created.project.revision).padStart(6, "0")}.json`]);
+  } finally { await deleteStoredProject(created.id); }
 });

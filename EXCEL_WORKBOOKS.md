@@ -45,6 +45,7 @@ A whole-book workbook contains:
 
 - one Storyboard-shaped worksheet per chapter or subchapter;
 - `Book Structure`;
+- `Block Templates`;
 - `Instructions`; and
 - `Block Types`.
 
@@ -73,7 +74,11 @@ Worksheet names must:
 - exclude `\`, `/`, `?`, `*`, `[`, `]`, and `:`; and
 - match `Worksheet` and `Parent worksheet` values exactly.
 
-The names `Book Structure`, `Instructions`, and `Block Types` are reserved.
+The names `Book Structure`, `Block Templates`, `Instructions`, and `Block Types` are reserved.
+
+### Block Templates columns
+
+Whole-book export writes every project-scoped saved block to `Block Templates`. Its exact headings are `Template name`, `Block type`, `Content`, `Mapping`, and `Settings JSON`. Whole-book import validates these rows and recreates the reusable template library. Image IDs are cleared in the same way as chapter rows, so imported image-based templates may need their images selected again.
 
 If `Book Structure` is absent, WorkPath treats every non-reference worksheet as a top-level chapter. This compatibility behavior cannot reconstruct subchapter relationships, summaries, enabled state, project title, or unit code.
 

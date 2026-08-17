@@ -2,9 +2,9 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { createProject, migrateProject } from "./index.js";
 
-test("migrates local 1.0 groups and HTML blocks to 1.3 chapters and subchapters", () => {
+test("migrates local 1.0 groups and HTML blocks to 1.4 chapters and subchapters", () => {
   const migrated = migrateProject({ schemaVersion: "1.0", id: "project", title: "Old local project", unitCode: "", revision: 4, createdAt: "now", updatedAt: "now", contentTopics: [{ id: "chapter", title: "Chapter", order: 1, enabled: true }], topics: [{ id: "topic", contentTopicId: "chapter", title: "Topic", summary: "", order: 1, blocks: [{ id: "block", type: "html", html: "<p>Keep me</p>" }] }], assets: [], theme: {} });
-  assert.equal(migrated.schemaVersion, "1.3");
+  assert.equal(migrated.schemaVersion, "1.4");
   assert.deepEqual(migrated.chapters[0]?.subchapters[0]?.blocks[0], { id: "block", type: "richText", html: "<p>Keep me</p>" });
   assert.equal(migrated.revision, 4);
 });
@@ -20,10 +20,12 @@ test("upgrades fixed three-column tables to the dynamic table model", () => {
   assert.equal(block.definitionVersion, "1.1.0");
 });
 
-test("migrates schema 1.2 projects to 1.3 without changing nested content", () => {
+test("migrates schema 1.2 and 1.3 projects to 1.4 with an empty template library", () => {
   const current = createProject("Current");
   const previous = { ...current, schemaVersion: "1.2" };
   const migrated = migrateProject(previous);
-  assert.equal(migrated.schemaVersion, "1.3");
+  assert.equal(migrated.schemaVersion, "1.4");
   assert.deepEqual(migrated.chapters, current.chapters);
+  const v13 = migrateProject({ ...current, schemaVersion: "1.3", blockTemplates: undefined });
+  assert.deepEqual(v13.blockTemplates, []);
 });
