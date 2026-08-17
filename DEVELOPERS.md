@@ -2,7 +2,7 @@
 
 ## Read this first
 
-WorkPath Author Local is a clean, local-first rebuild of the original Moodle-hosted WorkPath Author application.
+WorkPath Author Local is a local-first visual authoring application for Moodle Books.
 
 The new direction is:
 
@@ -10,7 +10,7 @@ The new direction is:
 - A React application runs in the user's normal browser and acts only as the editing client.
 - Editable project data lives on the local filesystem, not in browser storage.
 - The primary delivery contract is a ZIP that Moodle imports as a native, editable **Book** resource.
-- The previous browser application remains a reference and migration source; it is not the architectural foundation of this rebuild.
+- Legacy WorkPath formats remain supported migration sources; they are not the architectural foundation of this application.
 
 This repository is committed on `main` and tracks `https://github.com/Drift-Dragon-Codenoob/workpath-author-local.git` as `origin`.
 
@@ -453,7 +453,7 @@ The current compiler scopes most typography under `.workpath-book`, which is pre
 
 Before calling exports production-ready, record and test:
 
-- The exact Chisholm Moodle version and upgrade schedule.
+- The exact target Moodle version and upgrade schedule.
 - Whether authors have `booktool/importhtml:import`.
 - Whether imported `<style>` elements are retained.
 - Which HTML elements and attributes are sanitised.
@@ -466,15 +466,9 @@ Before calling exports production-ready, record and test:
 
 Keep test packages from the actual Moodle instance as regression fixtures where policy permits.
 
-## Relationship to the original app
+## Legacy compatibility reference
 
-The reference application is currently located at:
-
-```text
-/home/dragon_code/projects/WorkPath Author
-```
-
-It contains:
+When an authorised legacy WorkPath implementation is available, it may contain:
 
 - The original React/Vite browser implementation.
 - YAML widget definitions and captured Moodle sample templates.
@@ -484,7 +478,7 @@ It contains:
 - Existing Moodle Book export behaviour.
 - Historical migration code.
 
-Use it to understand expected behaviour and migrate assets deliberately. Do not copy its 6,000-line `App.tsx` into the rebuild.
+Use authorised reference material to understand expected behaviour and migrate assets deliberately. Preserve the current architecture rather than copying a monolithic browser implementation.
 
 Recommended migration order:
 
@@ -495,7 +489,7 @@ Recommended migration order:
 5. Widget editor components, one family at a time.
 6. DOCX import/export after the local project model stabilises.
 
-The old app's current working tree contains uncommitted feature work. Treat its files as reference material and do not modify them from this workspace unless explicitly requested.
+Do not modify an external reference implementation from this workspace.
 
 ## Performance direction
 
@@ -617,7 +611,7 @@ The first releasable local version should allow an author to:
 
 ## Handover checklist for the next workspace
 
-1. Open `/home/dragon_code/projects/WorkPath Author Local` as the workspace root.
+1. Open the cloned repository as the workspace root.
 2. Read this file and `README.md`.
 3. Run `npm install` if dependencies are unavailable.
 4. Run `npm run typecheck` and `npm test`.
@@ -628,10 +622,10 @@ The first releasable local version should allow an author to:
 
 ## Last verified state
 
-Last verified on 13 July 2026:
+Last verified on 17 August 2026:
 
 - TypeScript checks across all workspaces.
-- All 30 core and server tests, including missing-image Moodle export, the complete block registry, HTML/video safety, nested gallery media, visible alt-text fallback, imported placeholder assignment, Excel template, namespaced workflow compatibility, page round-trip and whole-book export/import coverage.
+- All 42 core and server tests, including Moodle ZIP/MBZ recovery, exact source-manifest restoration, missing-image Moodle export, the complete block registry, HTML/video safety, nested gallery media, imported placeholder assignment, Excel templates, namespaced workflow compatibility, page round-trip and whole-book export/import coverage.
 - Core, web and server production builds.
 
 The production build reports a Vite size warning for the lazy-loaded TinyMCE editor chunk. This is a performance warning, not a build failure. Normal development starts with `npm run dev`.

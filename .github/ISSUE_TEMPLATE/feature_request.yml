@@ -1,0 +1,26 @@
+name: Feature request
+description: Propose an improvement to the authoring or Moodle workflow.
+title: "[Feature]: "
+labels: [enhancement]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem to solve
+      description: Describe the author or learner need rather than only the proposed interface.
+    validations:
+      required: true
+  - type: textarea
+    id: outcome
+    attributes:
+      label: Desired outcome
+    validations:
+      required: true
+  - type: textarea
+    id: moodle
+    attributes:
+      label: Moodle or compatibility considerations
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered

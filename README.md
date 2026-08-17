@@ -1,8 +1,13 @@
 # WorkPath Author Local
 
-A local-first rebuild of WorkPath Author. A Node service owns project files, media and Moodle compilation; a React browser interface is the editing client.
+[![CI](https://github.com/Drift-Dragon-Codenoob/workpath-author-local/actions/workflows/ci.yml/badge.svg)](https://github.com/Drift-Dragon-Codenoob/workpath-author-local/actions/workflows/ci.yml)
+![Project status: alpha](https://img.shields.io/badge/status-alpha-orange)
 
-This is a new architectural direction, not a desktop wrapper around the previous browser application. The editable source lives on disk, processing belongs outside React, and the primary release artifact is a Moodle Book chapter-import ZIP.
+WorkPath Author Local is a local-first visual authoring application for creating accessible Moodle Books. A Node service owns project files, media and Moodle compilation; a React browser interface provides structured block editing, preview and project management.
+
+The editable source remains on the author's computer, while Moodle ZIP files and Excel workbooks are explicit export formats. The portable Windows build includes its own runtime and does not require Node.js to be installed system-wide.
+
+> **Alpha software:** use WorkPath with review and backups. Moodle policies vary between institutions, and the portable executable is not currently code-signed.
 
 ## Run
 
@@ -56,7 +61,7 @@ See [DEVELOPERS.md](./DEVELOPERS.md) for the architecture and rebuild roadmap.
 
 ## Current maturity
 
-The repository is a working early rebuild, not yet a complete replacement for the original application. Project storage, revision-safe autosaving and backups, original JSON migration, top-down block authoring, reusable project block templates, TinyMCE rich text, image upload, structured Excel exchange, Moodle preview and Moodle compilation work. Media ZIP migration, external YAML widget packs and institutional Moodle compatibility testing remain future work.
+The repository is a working alpha. Project storage, revision-safe autosaving and backups, legacy JSON migration, top-down block authoring, reusable project block templates, rich text, image upload, structured Excel exchange, Moodle preview and Moodle compilation work. Media ZIP migration, external YAML widget packs and broader institutional Moodle compatibility testing remain future work.
 
 ## Block library
 
@@ -107,3 +112,24 @@ For older ZIP/MBZ files without that manifest, WorkPath recognises its exported 
 5. Use **Export Excel Book** for a structured whole-book handover or **Export Moodle Book** for the Moodle chapter-import ZIP.
 
 Projects autosave locally after editing. **Close project** saves and returns to the home menu so another project can be opened. Preview, project navigation and exports wait for a successful save, while each save retains rolling JSON backups alongside the locally stored assets. The Save button remains available for an immediate save.
+
+## Security and privacy
+
+- The service binds to `127.0.0.1` and is intended for one user on one computer. Do not expose it directly to a network or the public internet.
+- Projects and uploaded assets stay in the local `WorkPath Projects` folder unless the author explicitly exports or copies them.
+- Treat imported Moodle, Excel and legacy project files as untrusted. WorkPath applies file-count, size, path and executable-markup controls, but security reports are still welcome.
+- See [SECURITY.md](./SECURITY.md) for responsible disclosure instructions.
+
+## Contributing
+
+See [CONTRIBUTING.md](./CONTRIBUTING.md) for development setup, checks and contribution expectations. Public release criteria are tracked in [PUBLIC_RELEASE_CHECKLIST.md](./PUBLIC_RELEASE_CHECKLIST.md).
+
+## Licence
+
+Copyright © 2026 David Last.
+
+WorkPath Author Local is free software licensed under the [GNU General Public License v3.0 or later](./LICENSE). You may use, study, modify and redistribute it under those terms. Distributed modified versions must preserve the licence and make their corresponding source available.
+
+GPL permissions already granted for a published version cannot be withdrawn. The copyright holder may separately license original WorkPath code under other terms, but contributed code and GPL dependencies cannot be included in a proprietary edition without the necessary additional permissions.
+
+Bundled dependencies retain their own licences—see [THIRD_PARTY_NOTICES.md](./THIRD_PARTY_NOTICES.md).
