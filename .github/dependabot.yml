@@ -4,6 +4,8 @@ updates:
     directory: /
     schedule:
       interval: weekly
+    cooldown:
+      semver-major-days: 30
     open-pull-requests-limit: 5
     groups:
       npm-minor-and-patch:
