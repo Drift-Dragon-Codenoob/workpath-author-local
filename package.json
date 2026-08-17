@@ -2,7 +2,17 @@
   "name": "workpath-author-local",
   "private": true,
   "version": "0.1.0",
+  "description": "Local-first visual authoring for accessible Moodle Books, with portable Windows delivery and ZIP/MBZ recovery.",
   "type": "module",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Drift-Dragon-Codenoob/workpath-author-local.git"
+  },
+  "bugs": {
+    "url": "https://github.com/Drift-Dragon-Codenoob/workpath-author-local/issues"
+  },
+  "homepage": "https://github.com/Drift-Dragon-Codenoob/workpath-author-local#readme",
+  "keywords": ["moodle", "authoring-tool", "education", "local-first", "typescript", "react"],
   "engines": {
     "node": ">=24 <25",
     "npm": ">=11 <12"
